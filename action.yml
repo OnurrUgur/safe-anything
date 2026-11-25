@@ -65,5 +65,14 @@ runs:
       run: |
         args=("$SCAN_PATH" --severity "$SEVERITY")
         [ "$OFFLINE" = true ] && args+=(--offline)
-        safe-anything "${args[@]}" --sarif --fail-on never > "$SARIF"
-        safe-anything "${args[@]}" --fail-on "$FAIL_ON"
+        case "$(safe-anything --help)" in
+          *--sarif-file*)
+            # One scan writes the SARIF file and prints the report.
+            safe-anything "${args[@]}" --sarif-file "$SARIF" --fail-on "$FAIL_ON"
+            ;;
+          *)
+            # A release from before --sarif-file (picked with the version input).
+            safe-anything "${args[@]}" --sarif --fail-on never > "$SARIF"
+            safe-anything "${args[@]}" --fail-on "$FAIL_ON"
+            ;;
+        esac

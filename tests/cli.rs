@@ -110,6 +110,66 @@ fn every_rule_has_a_cwe_and_a_reference() {
 }
 
 #[test]
+fn sarif_file_written_by_the_same_run_as_the_report() {
+    let dir = std::env::temp_dir().join(format!("safe-anything-sarif-file-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("out.sarif");
+    let file = file.to_str().unwrap();
+    let (_, sarif) = run(&[
+        &fixture("code"),
+        "--offline",
+        "--sarif",
+        "--fail-on",
+        "never",
+    ]);
+    // The terminal report on stdout, SARIF in the file, and --fail-on applied.
+    let (code, out) = run(&[&fixture("code"), "--offline", "--sarif-file", file]);
+    assert_eq!(code, 1);
+    assert!(out.contains("findings"), "{out}");
+    assert_eq!(std::fs::read_to_string(file).unwrap(), sarif);
+    // --severity filters both outputs the same way, and --json still works.
+    let (_, sarif) = run(&[
+        &fixture("code"),
+        "--offline",
+        "--sarif",
+        "--severity",
+        "critical",
+    ]);
+    let (code, out) = run(&[
+        &fixture("code"),
+        "--offline",
+        "--json",
+        "--severity",
+        "critical",
+        "--fail-on",
+        "never",
+        "--sarif-file",
+        file,
+    ]);
+    assert_eq!(code, 0);
+    let report: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+    let written: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+    assert_eq!(
+        written["runs"][0]["results"].as_array().unwrap().len(),
+        report["findings"].as_array().unwrap().len()
+    );
+    assert_eq!(std::fs::read_to_string(file).unwrap(), sarif);
+    // A file that can't be written is an error, not a silent success.
+    let missing = dir.join("no-such-dir").join("out.sarif");
+    let (code, _) = run(&[
+        &fixture("code"),
+        "--offline",
+        "--fail-on",
+        "never",
+        "--sarif-file",
+        missing.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 2);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn sarif_output_for_code_scanning() {
     let (_, out) = run(&[&fixture("code"), "--sarif", "--offline"]);
     let sarif: serde_json::Value = serde_json::from_str(&out).expect("valid SARIF JSON");

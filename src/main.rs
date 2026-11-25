@@ -20,6 +20,9 @@ struct Cli {
     /// Print the report as SARIF 2.1.0 (GitHub code scanning)
     #[arg(long)]
     sarif: bool,
+    /// Also write the report as SARIF 2.1.0 to this file, from the same scan
+    #[arg(long, value_name = "FILE")]
+    sarif_file: Option<PathBuf>,
     /// Skip the dependency check (no network)
     #[arg(long)]
     offline: bool,
@@ -94,11 +97,15 @@ fn main() -> ExitCode {
         }
     };
     report.findings.retain(|f| f.severity >= cli.severity);
+    let sarif = || serde_json::to_string_pretty(&safe_anything::sarif::render(&report)).unwrap();
+    if let Some(path) = &cli.sarif_file
+        && let Err(e) = std::fs::write(path, sarif() + "\n")
+    {
+        eprintln!("error: can't write {}: {e}", path.display());
+        return ExitCode::from(2);
+    }
     if cli.sarif {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&safe_anything::sarif::render(&report)).unwrap()
-        );
+        println!("{}", sarif());
     } else if cli.json {
         println!("{}", serde_json::to_string_pretty(&report).unwrap());
     } else {

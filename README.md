@@ -63,6 +63,7 @@ found, so it works as a pre-commit or CI check as is.
 ```bash
 safe-anything . --json             # machine-readable report
 safe-anything . --sarif            # GitHub code scanning
+safe-anything . --sarif-file out   # SARIF to the file out, the report on screen
 safe-anything . --offline          # no network (skips the dependency check)
 safe-anything . --severity medium  # hide low findings
 safe-anything . --fail-on never    # always exit 0 (or low, medium, high, critical)
