@@ -15,6 +15,9 @@
   `$POSTGRES_PASSWORD`) is skipped.
 - Agent: an MCP config whose `npx` (or `pnpm dlx`) argument is empty or starts with a non-ASCII
   character no longer crashes the scan.
+- Scan: minified bundles, source maps, `.jsonl` and `.log` files, and images, fonts, archives, media and
+  compiled files (`png`, `woff2`, `zip`, `mp4`, `class`, ...) are skipped by name without being opened.
+  Other binary files are left after their first 8 KB instead of being read in full.
 - Agent: `agent.mcp-plaintext-secret` no longer takes an env key for a secret when its credential word is
   only part of an ordinary word, so `PATH`, `PYTHONPATH`, `NODE_PATH`, `DISPATCH_MODE`, `AUTHOR`,
   `MONKEY_PATCH` and `KEYCHAIN_PROFILE` are not reported. `GITHUB_PAT`, `githubPat`, `OPENAI_APIKEY`,

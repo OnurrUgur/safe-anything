@@ -78,7 +78,9 @@ safe-anything --list-rules
     not checked
   - any file over 2 MB, lockfiles included, so a lockfile that large gets no dependency check
   - `*.min.js`, `*.map`, `*.jsonl` and `*.log`
-  - binary files (a zero byte in the first 8 KB)
+  - binary files: images, fonts, archives, media and compiled files by their extension (`.png`, `.woff2`,
+    `.zip`, `.mp4`, `.class`, ...), and any other file with a zero byte in its first 8 KB. A text file
+    saved under one of those extensions is not scanned either.
   - `*.lock` files get the dependency check but no code rules
 - `safe-anything:ignore` in a comment silences that line (or the next one).
 - In tests, specs and fixtures only real provider keys and private keys count, unless you pass
