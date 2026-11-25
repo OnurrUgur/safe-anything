@@ -49,3 +49,5 @@ mcp_config.json:10 agent.mcp-plaintext-secret
 cline_mcp_settings.json:4 agent.mcp-insecure-url
 .zed/settings.json:9 agent.mcp-unpinned
 .config/zed/settings.json:8 agent.mcp-unpinned
+.mcp.json:89 agent.mcp-insecure-url
+.mcp.json:90 agent.mcp-insecure-url
