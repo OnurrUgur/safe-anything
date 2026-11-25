@@ -141,6 +141,40 @@ fn sarif_output_for_code_scanning() {
 }
 
 #[test]
+fn sarif_paths_are_relative_to_the_working_directory() {
+    let dir = std::env::temp_dir().join(format!("safe-anything-sarif-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("app/src")).unwrap();
+    std::fs::write(dir.join("app/src/x.js"), "eval(req.query.code);\n").unwrap();
+    let uri = |cwd: &Path, args: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_safe-anything"))
+            .args(args)
+            .args(["--sarif", "--offline"])
+            .current_dir(cwd)
+            .output()
+            .unwrap();
+        let sarif: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]
+            ["uri"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    assert_eq!(uri(&dir, &["app"]), "app/src/x.js");
+    assert_eq!(uri(&dir, &["./app/"]), "app/src/x.js");
+    assert_eq!(uri(&dir, &["app/src/x.js"]), "app/src/x.js");
+    assert_eq!(
+        uri(&dir, &[dir.join("app").to_str().unwrap()]),
+        "app/src/x.js"
+    );
+    assert_eq!(uri(&dir.join("app"), &["."]), "src/x.js");
+    assert_eq!(uri(&dir.join("app/src"), &["../src"]), "x.js");
+    // The terminal report keeps paths relative to the scanned folder.
+    let (_, out) = run(&[dir.join("app").to_str().unwrap(), "--offline"]);
+    assert!(out.contains(" src/x.js:1 "), "{out}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn mcp_server_scans_over_stdio() {
     use std::io::{BufRead, BufReader, Write};
     let mut child = Command::new(env!("CARGO_BIN_EXE_safe-anything"))
