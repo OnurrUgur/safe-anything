@@ -80,7 +80,9 @@ safe-anything --list-rules
   - `*.min.js`, `*.map`, `*.jsonl` and `*.log`
   - binary files (a zero byte in the first 8 KB)
   - `*.lock` files get the dependency check but no code rules
-- `safe-anything:ignore` in a comment silences that line (or the next one).
+- `safe-anything:ignore` in a comment silences that line (or the next one). Follow it with rule ids,
+  `// safe-anything:ignore code.weak-hash, code.eval`, to silence only those rules. An id that is no
+  rule (a typo) silences nothing, so the finding stays in the report.
 - In tests, specs and fixtures only real provider keys and private keys count, unless you pass
   `--include-tests`.
 

@@ -36,6 +36,9 @@
 - Agent: new rule `agent.mcp-auto-approve` (high) for `"enableAllProjectMcpServers": true` in
   `.claude/settings*.json`, which starts every MCP server in the project's `.mcp.json` without asking about
   each one.
+- CLI: `safe-anything:ignore` takes an optional list of rule ids (`// safe-anything:ignore code.weak-hash, code.eval`)
+  and then silences only those rules on that line and the next. An unknown id silences nothing. A bare marker
+  still silences every rule.
 
 ## 1.0.2 (2026-11-23)
 

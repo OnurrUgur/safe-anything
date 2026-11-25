@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -106,13 +108,20 @@ pub fn all() -> impl Iterator<Item = &'static Rule> {
 pub struct Text<'a> {
     pub src: &'a str,
     starts: Vec<usize>,
+    /// What the `safe-anything:ignore` markers on each line cover, read once per line: a long
+    /// line can hold many findings.
+    marks: RefCell<HashMap<usize, Cover>>,
 }
 
 impl<'a> Text<'a> {
     pub fn new(src: &'a str) -> Self {
         let mut starts = vec![0];
         starts.extend(src.match_indices('\n').map(|(i, _)| i + 1));
-        Self { src, starts }
+        Self {
+            src,
+            starts,
+            marks: RefCell::default(),
+        }
     }
 
     pub fn line_of(&self, offset: usize) -> usize {
@@ -125,10 +134,127 @@ impl<'a> Text<'a> {
         self.src[start..end].trim_end_matches('\r')
     }
 
-    pub fn suppressed(&self, n: usize) -> bool {
-        const MARK: &str = "safe-anything:ignore";
-        self.line(n).contains(MARK) || (n > 1 && self.line(n - 1).contains(MARK))
+    /// Whether a `safe-anything:ignore` marker on line `n` or the line above covers `rule`.
+    pub fn suppressed(&self, n: usize, rule: &str) -> bool {
+        self.ignores(n, rule) || (n > 1 && self.ignores(n - 1, rule))
     }
+
+    fn ignores(&self, n: usize, rule: &str) -> bool {
+        self.marks
+            .borrow_mut()
+            .entry(n)
+            .or_insert_with(|| Cover::of(self.line(n)))
+            .covers(rule)
+    }
+}
+
+/// The rules the `safe-anything:ignore` markers on a line cover.
+///
+/// A bare marker covers every rule. A marker followed by rule ids
+/// (`safe-anything:ignore code.weak-hash, code.eval`) covers only the known ones among them, so a
+/// typo like `code.weak-hashh` covers nothing and the finding stays in the report.
+#[derive(Default)]
+struct Cover {
+    all: bool,
+    ids: Vec<&'static str>,
+}
+
+impl Cover {
+    fn of(line: &str) -> Self {
+        const MARK: &str = "safe-anything:ignore";
+        let mut cover = Self::default();
+        // Splitting at the markers reads each part of the line once, however many it holds.
+        for after in line.split(MARK).skip(1) {
+            match marker_ids(after) {
+                None => {
+                    cover.all = true;
+                    break;
+                }
+                Some(ids) => {
+                    for id in ids {
+                        if !cover.ids.contains(&id) {
+                            cover.ids.push(id);
+                        }
+                    }
+                }
+            }
+        }
+        cover
+    }
+
+    fn covers(&self, rule: &str) -> bool {
+        self.all || self.ids.contains(&rule)
+    }
+}
+
+/// The known rule ids a marker lists, or `None` when it lists none and so is bare. `after` is the
+/// text after the marker, up to the next one.
+///
+/// The list ends at `*/` or `-->` (the rest of the comment is not part of it). It must be set
+/// apart from the marker by whitespace or `:`; `safe-anything:ignore,` is bare. Words are split at
+/// whitespace and commas and read from the start while they look like rule ids (`family.name`);
+/// one trailing `.`, `;` or `:` is dropped and ends the list.
+fn marker_ids(after: &str) -> Option<Vec<&'static str>> {
+    static KNOWN: LazyLock<std::collections::HashSet<&'static str>> =
+        LazyLock::new(|| crate::rules().into_iter().map(|r| r.id).collect());
+    let end = ["*/", "-->", "%>", "*@"]
+        .iter()
+        .filter_map(|closer| after.find(closer))
+        .min()
+        .unwrap_or(after.len());
+    let list = &after[..end];
+    let list = match list.strip_prefix(':') {
+        Some(rest) => rest,
+        None if list.is_empty() || list.starts_with(char::is_whitespace) => list,
+        None => return None,
+    };
+    let mut ids = Vec::new();
+    let mut listed = false;
+    for word in list
+        .split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|w| !w.is_empty())
+    {
+        let (id, last) = match word.strip_suffix(['.', ';', ':']) {
+            Some(id) => (id, true),
+            None => (word, false),
+        };
+        if !looks_like_id(id) {
+            break;
+        }
+        listed = true;
+        if let Some(&known) = KNOWN.get(id) {
+            ids.push(known);
+        }
+        if last {
+            break;
+        }
+    }
+    listed.then_some(ids)
+}
+
+/// `family.name` for one of the rule families, the name starting with a letter or digit and going
+/// on with letters, digits, `_` or `-`. Case and a plural family (`Code.Eval`, `secrets.x`) still
+/// look like an id, so such a typo covers nothing instead of silencing every rule.
+fn looks_like_id(word: &str) -> bool {
+    const FAMILIES: [Family; 6] = [
+        Family::Code,
+        Family::Secret,
+        Family::Agent,
+        Family::Mobile,
+        Family::Config,
+        Family::Dependency,
+    ];
+    let Some((family, name)) = word.split_once('.') else {
+        return false;
+    };
+    let family = family.to_ascii_lowercase();
+    let alnum = |c: char| c.is_ascii_alphanumeric();
+    (family == "dependencies"
+        || FAMILIES
+            .iter()
+            .any(|f| family == f.as_str() || family == format!("{}s", f.as_str())))
+        && name.starts_with(alnum)
+        && name.chars().all(|c| alnum(c) || c == '_' || c == '-')
 }
 
 pub struct Meta<'a> {
@@ -200,7 +326,7 @@ pub fn check(file: &FileInfo, src: &str, include_tests: bool) -> Vec<Finding> {
                     .unwrap_or("")
             });
             let line = text.line_of(m.start());
-            if text.suppressed(line) {
+            if text.suppressed(line, c.rule.id) {
                 continue;
             }
             if c.rule.family == Family::Code
@@ -235,7 +361,7 @@ pub fn check(file: &FileInfo, src: &str, include_tests: bool) -> Vec<Finding> {
         .into_iter()
         .filter(|_| !test_file)
     {
-        if !text.suppressed(f.line) && seen.insert((f.rule.clone(), f.line)) {
+        if !text.suppressed(f.line, &f.rule) && seen.insert((f.rule.clone(), f.line)) {
             out.push(f);
         }
     }
@@ -252,4 +378,283 @@ fn is_comment(line: &str) -> bool {
 
 fn is_prose(line: &str) -> bool {
     line.contains("**") || line.contains('⚠') || line.contains("\\b")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ignore_marker_with_rule_ids() {
+        let cases = [
+            ("x // safe-anything:ignore", "code.eval", true),
+            ("x <!-- safe-anything:ignore -->", "code.eval", true),
+            ("x /* safe-anything:ignore*/", "code.eval", true),
+            (
+                "x /* safe-anything:ignore */ // see code.eval",
+                "code.weak-hash",
+                true,
+            ),
+            (
+                "x // safe-anything:ignore false positive, reviewed",
+                "code.eval",
+                true,
+            ),
+            (
+                "x // safe-anything:ignore not code.eval",
+                "code.weak-hash",
+                true,
+            ),
+            (
+                "x // safe-anything:ignore - code.eval",
+                "code.weak-hash",
+                true,
+            ),
+            // A case or plural typo still looks like an id, so it covers nothing.
+            ("x // safe-anything:ignore Code.Eval", "code.eval", false),
+            (
+                "x // safe-anything:ignore code.weakHash",
+                "code.eval",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore secrets.hardcoded-password",
+                "secret.hardcoded-password",
+                false,
+            ),
+            // ERB and Razor comment closers end the list.
+            (
+                "<%# safe-anything:ignore code.eval%><% eval(x) %>",
+                "code.eval",
+                true,
+            ),
+            (
+                "<%# safe-anything:ignore code.eval%><% eval(x) %>",
+                "code.weak-hash",
+                false,
+            ),
+            ("@* safe-anything:ignore code.eval*@", "code.eval", true),
+            (
+                "x // uses safe-anything:ignore, code.eval is fine",
+                "code.weak-hash",
+                true,
+            ),
+            (
+                "x // safe-anything:ignored code.eval",
+                "code.weak-hash",
+                true,
+            ),
+            ("x // safe-anything:ignorefoo", "code.eval", true),
+            ("x // safe-anything:ignore code.eval", "code.eval", true),
+            (
+                "x // safe-anything:ignore code.eval",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore\tcode.eval",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore code.weak-hash,code.eval",
+                "code.eval",
+                true,
+            ),
+            (
+                "x // safe-anything:ignore code.weak-hash, code.eval",
+                "code.eval",
+                true,
+            ),
+            (
+                "x // safe-anything:ignore code.weak-hash code.eval",
+                "code.weak-hash",
+                true,
+            ),
+            (
+                "x // safe-anything:ignore code.weak-hash code.eval",
+                "secret.aws-access-key",
+                false,
+            ),
+            ("x // safe-anything:ignore: code.eval", "code.eval", true),
+            (
+                "x // safe-anything:ignore: code.eval",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore:code.eval",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore code.weak-hash: checksum",
+                "code.weak-hash",
+                true,
+            ),
+            (
+                "x // safe-anything:ignore code.weak-hash: checksum",
+                "code.eval",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore code.eval.",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore code.eval; code.weak-hash",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore code.eval - unlike secret.hardcoded-password this is safe",
+                "code.eval",
+                true,
+            ),
+            (
+                "x // safe-anything:ignore code.eval - unlike secret.hardcoded-password this is safe",
+                "secret.hardcoded-password",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore code.eval reviewed by ü",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore code.eval — geprüft",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore secret.aws_access_key, code.eval",
+                "code.eval",
+                true,
+            ),
+            (
+                "x // safe-anything:ignore secret.aws_access_key, code.eval",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore code.eval, secret.aws_access_key, code.weak-hash",
+                "code.weak-hash",
+                true,
+            ),
+            ("x /* safe-anything:ignore code.eval*/", "code.eval", true),
+            (
+                "x /* safe-anything:ignore code.eval*/",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x /* safe-anything:ignore code.eval */",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x /* safe-anything:ignore code.eval*/eval(y)",
+                "code.eval",
+                true,
+            ),
+            (
+                "x /* safe-anything:ignore code.eval*/eval(y)",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x /* safe-anything:ignore code.eval*/ code.weak-hash",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x <!-- safe-anything:ignore code.xss-v-html--><div>",
+                "code.xss-v-html",
+                true,
+            ),
+            (
+                "x <!-- safe-anything:ignore code.xss-v-html--><div>",
+                "code.eval",
+                false,
+            ),
+            (
+                "x <!-- safe-anything:ignore code.xss-v-html -->",
+                "code.eval",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore code.weak-hashh",
+                "code.weak-hash",
+                false,
+            ),
+            (
+                "x // safe-anything:ignore code.weak-hashh",
+                "code.eval",
+                false,
+            ),
+            ("x {/* safe-anything:ignore code.x*/}", "code.eval", false),
+            (
+                "x // safe-anything:ignore code.js is generated",
+                "code.eval",
+                false,
+            ),
+            (
+                "x # safe-anything:ignore code.eval # safe-anything:ignore",
+                "code.weak-hash",
+                true,
+            ),
+            (
+                "x # safe-anything:ignore code.eval safe-anything:ignore code.weak-hash",
+                "code.weak-hash",
+                true,
+            ),
+            (
+                "x # safe-anything:ignore code.eval safe-anything:ignore code.weak-hash",
+                "code.eval",
+                true,
+            ),
+            (
+                "x # safe-anything:ignore code.eval safe-anything:ignore code.weak-hash",
+                "secret.aws-access-key",
+                false,
+            ),
+            ("x // nothing to see", "code.eval", false),
+        ];
+        let wrong: Vec<_> = cases
+            .iter()
+            .filter(|&&(line, rule, want)| Cover::of(line).covers(rule) != want)
+            .collect();
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    #[test]
+    fn ignore_marker_on_the_line_above_with_rule_ids() {
+        let text = Text::new("// safe-anything:ignore code.eval\nx\ny\n");
+        assert!(!text.suppressed(1, "code.weak-hash"));
+        assert!(text.suppressed(2, "code.eval"));
+        assert!(!text.suppressed(2, "code.weak-hash"));
+        assert!(!text.suppressed(3, "code.eval"));
+    }
+
+    #[test]
+    fn ignore_rule_ids_in_an_mcp_config() {
+        let src = r#"{
+  "mcp": {
+    "x": {
+      "type": "local",
+      // safe-anything:ignore agent.mcp-unpinned
+      "command": ["npx", "-y", "some-mcp"],
+      // safe-anything:ignore agent.mcp-unpinned
+      "environment": { "API_TOKEN": "example-plaintext-value" }
+    }
+  }
+}"#;
+        let found: Vec<(usize, String)> = check(&FileInfo::new("opencode.jsonc"), src, false)
+            .into_iter()
+            .filter(|f| f.family == Family::Agent)
+            .map(|f| (f.line, f.rule))
+            .collect();
+        assert_eq!(found, vec![(8, "agent.mcp-plaintext-secret".to_string())]);
+    }
 }

@@ -37,7 +37,7 @@ pub fn env_not_ignored(root: &Path, env_files: &[String]) -> Option<Finding> {
         ),
     };
     let text = Text::new(&src);
-    if text.suppressed(1) {
+    if text.suppressed(1, ENV_NOT_IGNORED.0) {
         return None;
     }
     // `.env` contents are only needed to honor suppression directives; never

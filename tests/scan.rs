@@ -83,6 +83,30 @@ fn env_example_without_gitignore() {
 }
 
 #[test]
+fn env_not_ignored_marker_with_rule_ids() {
+    let root =
+        std::env::temp_dir().join(format!("safe-anything-ignore-ids-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join(".env"), "SETTING=example-value\n").unwrap();
+    let reported = |gitignore: &str| {
+        std::fs::write(root.join(".gitignore"), gitignore).unwrap();
+        let report = safe_anything::scan(&root, &safe_anything::Options::offline()).unwrap();
+        report
+            .findings
+            .iter()
+            .any(|f| f.rule == "secret.env-not-ignored")
+    };
+    let other = reported("# safe-anything:ignore code.eval\nnode_modules\n");
+    let this = reported("# safe-anything:ignore secret.env-not-ignored\nnode_modules\n");
+    let bare = reported("# safe-anything:ignore\nnode_modules\n");
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(other, "a marker for another rule keeps the finding");
+    assert!(!this, "a marker for this rule drops it");
+    assert!(!bare, "a bare marker drops it");
+}
+
+#[test]
 fn code() {
     check("code");
 }
