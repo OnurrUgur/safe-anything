@@ -1,5 +1,5 @@
 use std::io::IsTerminal;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::Parser;
@@ -40,6 +40,39 @@ struct Cli {
 fn parse_severity(s: &str) -> Result<Severity, String> {
     Severity::parse(s)
         .ok_or_else(|| format!("unknown severity `{s}` (low, medium, high, critical)"))
+}
+
+/// GitHub code scanning reads SARIF paths from the repository root, so they start at the working
+/// directory (where the action runs) instead of the scanned folder. This is that folder as a
+/// `dir/` prefix, or nothing when it is the working directory or lies outside it.
+fn sarif_prefix(root: &Path) -> String {
+    let dir = match root.parent() {
+        Some(parent) if root.is_file() => parent,
+        _ => root,
+    };
+    let dir = if dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        dir
+    };
+    let Ok(cwd) = std::env::current_dir() else {
+        return String::new();
+    };
+    let plain = std::path::absolute(dir)
+        .ok()
+        .filter(|p| !p.components().any(|c| c == Component::ParentDir))
+        .and_then(|p| p.strip_prefix(&cwd).ok().map(Path::to_path_buf));
+    // `..`, or a symlink like macOS's /tmp, needs the real paths.
+    let rel = plain.or_else(|| {
+        let (dir, cwd) = (dir.canonicalize().ok()?, cwd.canonicalize().ok()?);
+        dir.strip_prefix(cwd).ok().map(Path::to_path_buf)
+    });
+    rel.map(|p| {
+        p.components()
+            .map(|c| format!("{}/", c.as_os_str().to_string_lossy()))
+            .collect()
+    })
+    .unwrap_or_default()
 }
 
 fn main() -> ExitCode {
@@ -95,6 +128,10 @@ fn main() -> ExitCode {
     };
     report.findings.retain(|f| f.severity >= cli.severity);
     if cli.sarif {
+        let prefix = sarif_prefix(&cli.path);
+        for f in &mut report.findings {
+            f.path = format!("{prefix}{}", f.path);
+        }
         println!(
             "{}",
             serde_json::to_string_pretty(&safe_anything::sarif::render(&report)).unwrap()
