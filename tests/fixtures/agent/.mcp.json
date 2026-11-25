@@ -52,6 +52,39 @@
         "daemonKey": "EXAMPLE_NOT_A_REAL_KEY_VALUE",
         "GITHUBPATVALUE": "EXAMPLE_NOT_A_REAL_PAT_VALUE"
       }
+    },
+    "remote-token": {
+      "type": "http",
+      "url": "https://mcp.acme-tools.io/mcp",
+      "args": ["--dump", "headers"],
+      "env": { "X-API-Key": "${API_KEY}", "DB_PASSWORD": "correct horse battery staple" },
+      "headers": {
+        "Authorization": "Bearer EXAMPLEnotarealtoken0123456789abcdef",
+        "X-API-Key": "EXAMPLEnotarealkey0123456789abcdef",
+        "X-Request-Source": "acme-desktop-client"
+      }
+    },
+    "remote-codex": {
+      "url": "https://mcp.acme-tools.io/mcp",
+      "http_headers": { "proxy-authorization": "Basic EXAMPLEnotarealbasic0123456789" }
+    },
+    "remote-env": {
+      "type": "sse",
+      "url": "https://mcp.acme-tools.io/sse",
+      "env": {
+        "DB_URL_PASSWORD": "admin:EXAMPLEnotreal@${DB_HOST}",
+        "ACME_TOKEN": "${ACME_TOKEN:-EXAMPLEnotarealdefault}",
+        "GOOGLE_APPLICATION_CREDENTIALS": "${HOME}/keys/service-account.json",
+        "INFLUX_KEY_FILE": "${INFLUX_KEY_FILE:-$HOME/.influx/api-key}"
+      },
+      "headers": {
+        "Authorization": "Bearer ${API_TOKEN}",
+        "X-API-Key": "${env:API_KEY}",
+        "X-Auth-Token": "{env:AUTH_TOKEN}",
+        "Proxy-Authorization": "Basic <base64 user:password>",
+        "X-Api-Token": "ApiKey ${ACME_KEY}",
+        "X-Acme-Key": "<your acme key here>"
+      }
     }
   }
 }

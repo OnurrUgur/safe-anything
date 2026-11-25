@@ -23,6 +23,12 @@
 .mcp.json:51 agent.mcp-plaintext-secret
 .mcp.json:52 agent.mcp-plaintext-secret
 .mcp.json:53 agent.mcp-plaintext-secret
+.mcp.json:60 agent.mcp-plaintext-secret
+.mcp.json:62 agent.mcp-plaintext-secret
+.mcp.json:63 agent.mcp-plaintext-secret
+.mcp.json:69 agent.mcp-plaintext-secret
+.mcp.json:75 agent.mcp-plaintext-secret
+.mcp.json:76 agent.mcp-plaintext-secret
 .mcp.json:5 agent.mcp-unpinned
 .mcp.json:7 agent.mcp-plaintext-secret
 .mcp.json:7 secret.github-token

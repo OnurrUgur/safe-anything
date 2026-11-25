@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Agent: `agent.mcp-plaintext-secret` also checks the `headers` and `http_headers` of remote MCP servers
+  in JSON configs. `Authorization` and `Proxy-Authorization` always count. In `env` and headers alike, a
+  value is judged after its auth scheme and with its variables taken out: `Bearer ${API_TOKEN}` and
+  `user:${PASSWORD}` are skipped, `admin:<password>@${DB_HOST}` and `${TOKEN:-sk_live_...}` are
+  reported.
 - Secrets: `secret.env-not-ignored` is reported at the `.env` file when the project has no `.gitignore`
   at all. Example files like `.env.example` alone no longer trigger it.
 - Secrets: `secret.env-file` and `secret.env-example-value` now catch base64 values ending in `=` padding and
