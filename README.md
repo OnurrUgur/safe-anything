@@ -84,6 +84,19 @@ safe-anything --list-rules
 - In tests, specs and fixtures only real provider keys and private keys count, unless you pass
   `--include-tests`.
 
+On a codebase that already has findings, save them once and fail only on new ones:
+
+```bash
+safe-anything . --write-baseline .safe-anything-baseline.json
+safe-anything . --baseline .safe-anything-baseline.json
+```
+
+The baseline holds each finding's rule, path and a SHA-256 of its line, not the line itself, so it
+can be committed. A finding counts as known when all three match, wherever the line moved to. Paths
+are relative to the scanned folder, so scan the same folder you saved it from. Only files written by
+`--write-baseline` are read, not `--json` reports. Review changes to it like code: an entry added to
+it hides that finding.
+
 ## What it finds
 
 79 rules, each with a CWE id, an OWASP category and a link to the OWASP page that explains it.
@@ -130,6 +143,7 @@ Tools: `scan` (path, offline, severity, include_tests) and `list_rules`. The ski
 - uses: erkamyaman/safe-anything@v1.0.2
   with:
     fail-on: high
+    # baseline: .safe-anything-baseline.json   # fail only on findings not in it
 - uses: github/codeql-action/upload-sarif@v4
   if: always()
   with:

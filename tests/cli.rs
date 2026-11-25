@@ -141,6 +141,125 @@ fn sarif_output_for_code_scanning() {
 }
 
 #[test]
+fn baseline_hides_known_findings_only() {
+    let dir = std::env::temp_dir().join(format!("safe-anything-baseline-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let app = dir.join("app.js");
+    let baseline = dir.join(".safe-anything-baseline.json");
+    let scan = |extra: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_safe-anything"))
+            .arg(&dir)
+            .arg("--offline")
+            .args(extra)
+            .output()
+            .unwrap();
+        (
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
+    };
+    let found = |out: &str| -> Vec<(String, String, u64)> {
+        let report: serde_json::Value = serde_json::from_str(out).unwrap();
+        report["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| {
+                (
+                    f["path"].as_str().unwrap().into(),
+                    f["rule"].as_str().unwrap().into(),
+                    f["line"].as_u64().unwrap(),
+                )
+            })
+            .collect()
+    };
+    let eval = "const f = eval(req.body.code);\n";
+    let public = "const k = process.env.NEXT_PUBLIC_API_SECRET;\n";
+    std::fs::write(&app, [eval, public].concat()).unwrap();
+    let (code, _, err) = scan(&["--write-baseline", baseline.to_str().unwrap()]);
+    assert_eq!(code, 0, "{err}");
+    assert!(err.contains("Wrote 2 findings"), "{err}");
+    let written = std::fs::read_to_string(&baseline).unwrap();
+    assert!(
+        !written.contains("eval(req") && !written.contains("NEXT_PUBLIC"),
+        "{written}"
+    );
+
+    // The baseline sits in the scanned folder and gives no finding of its own.
+    let (code, out, _) = scan(&["--json"]);
+    assert_eq!(code, 1);
+    assert_eq!(found(&out).len(), 2, "{out}");
+
+    let with_baseline = ["--json", "--baseline", baseline.to_str().unwrap()];
+    let (code, out, err) = scan(&with_baseline);
+    assert_eq!((code, found(&out)), (0, vec![]), "{out}");
+    assert!(err.contains("2 findings are in the baseline"), "{err}");
+
+    // Moved code is still known; a new finding and a second copy of a known line are not.
+    std::fs::write(&app, ["\n\n", public, eval].concat()).unwrap();
+    assert_eq!(scan(&with_baseline).0, 0);
+    let new = "const g = eval(req.query.x);\n";
+    std::fs::write(&app, [eval, public, new, eval].concat()).unwrap();
+    let (code, out, err) = scan(&with_baseline);
+    assert_eq!(code, 1);
+    let eval_at = |line| ("app.js".to_string(), "code.eval".to_string(), line);
+    assert_eq!(found(&out), vec![eval_at(3), eval_at(4)], "{out}");
+    assert!(err.contains("2 findings are in the baseline"), "{err}");
+
+    // Only the --write-baseline format is read: a --json report is refused.
+    let (_, report, _) = scan(&["--json"]);
+    std::fs::write(&baseline, report).unwrap();
+    assert_eq!(scan(&with_baseline).0, 2);
+    std::fs::write(&baseline, "{\"findings\": []}").unwrap();
+    assert_eq!(scan(&with_baseline).0, 2);
+    std::fs::remove_file(&baseline).unwrap();
+    assert_eq!(scan(&with_baseline).0, 2);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn baseline_file_holds_no_line_text() {
+    let file = std::env::temp_dir().join(format!(
+        "safe-anything-baseline-text-{}.json",
+        std::process::id()
+    ));
+    for name in ["secrets", "config", "agent", "code"] {
+        let (_, out) = run(&[&fixture(name), "--offline", "--json"]);
+        let report: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let (code, _) = run(&[
+            &fixture(name),
+            "--offline",
+            "--include-tests",
+            "--write-baseline",
+            file.to_str().unwrap(),
+        ]);
+        assert_eq!(code, 0);
+        let written = std::fs::read_to_string(&file).unwrap();
+        for f in report["findings"].as_array().unwrap() {
+            let snippet = f["snippet"].as_str().unwrap();
+            assert!(
+                snippet.len() < 8 || !written.contains(snippet),
+                "{name}: {snippet}"
+            );
+        }
+        for word in ["snippet", "message", "line", "fix"] {
+            assert!(!written.contains(&format!("\"{word}\"")), "{name}: {word}");
+        }
+        for value in [
+            common::fake("password"),
+            common::fake("db-password"),
+            common::fake("github"),
+            "supersecret123".to_string(),
+        ] {
+            assert!(!written.contains(&value), "{name}: {value}");
+        }
+    }
+    std::fs::remove_file(&file).unwrap();
+}
+
+#[test]
 fn mcp_server_scans_over_stdio() {
     use std::io::{BufRead, BufReader, Write};
     let mut child = Command::new(env!("CARGO_BIN_EXE_safe-anything"))
