@@ -23,7 +23,7 @@ decide what they may do are code, and safe-anything checks them like code.
 | `agent.mcp-auto-approve` | `"enableAllProjectMcpServers": true` in `.claude/settings.json` | every server in a cloned repository's `.mcp.json` starts without asking about each one |
 | `agent.unrestricted-shell` | `"allow": ["Bash"]` | every shell command is pre-approved |
 | `agent.mcp-unpinned` | `"command": "npx", "args": ["-y", "some-mcp-server"]` | every start runs whatever was published last; a hijacked package runs with your access |
-| `agent.mcp-plaintext-secret` | `"env": { "GITHUB_TOKEN": "ghp_..." }` | the token travels with the file |
+| `agent.mcp-plaintext-secret` | `"env": { "GITHUB_TOKEN": "ghp_..." }`, `"headers": { "Authorization": "Bearer sk-..." }` | the token travels with the file; `"Bearer ${API_TOKEN}"` keeps it out |
 | `agent.mcp-insecure-url` | `"url": "http://mcp.example.net/sse"` | tool calls and results cross the network in clear text |
 | `agent.remote-script` | a hook or skill that runs `curl ... \| sh` | whoever controls the URL controls the machine |
 | `agent.prompt-injection` | "ignore all previous instructions", "do not tell the user" | text that turns the agent against its user |

@@ -20,6 +20,71 @@
     "tls": { "url": "https://mcp.acme-tools.io/mcp" },
     "empty": { "command": "npx", "args": [""] },
     "empty-dlx": { "command": "pnpm", "args": ["dlx", ""] },
-    "accent": { "command": "npx", "args": ["é@1.0.0"] }
+    "accent": { "command": "npx", "args": ["é@1.0.0"] },
+    "local-tool": {
+      "command": "/opt/tools/bin/local-mcp",
+      "env": {
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "PYTHONPATH": "/opt/tools/lib",
+        "NODE_PATH": "/opt/tools/node_modules",
+        "DISPATCH_MODE": "round-robin",
+        "AUTHOR": "Jane Example",
+        "MONKEY_PATCH": "enabled-always",
+        "KEYCHAIN_PROFILE": "default-profile",
+        "TURKEY_REGION": "europe-west-1",
+        "COMPAT_MODE": "legacy-v1-mode",
+        "PATTERN_FILE": "/opt/tools/patterns.txt"
+      }
+    },
+    "gh-pat": {
+      "command": "/opt/tools/bin/gh-mcp",
+      "env": {
+        "GITHUB_PAT": "EXAMPLE_NOT_A_REAL_PAT_VALUE",
+        "githubPat": "EXAMPLE_NOT_A_REAL_PAT_VALUE",
+        "OPENAI_APIKEY": "EXAMPLE_NOT_A_REAL_KEY_VALUE",
+        "clientSecret": "EXAMPLE_NOT_A_REAL_SECRET",
+        "BASIC_AUTH": "EXAMPLE_NOT_A_REAL_AUTH",
+        "API_KEY1": "EXAMPLE_NOT_A_REAL_KEY_VALUE",
+        "SSHKEY": "EXAMPLE_NOT_A_REAL_KEY_VALUE",
+        "GITHUB_OAUTH": "EXAMPLE_NOT_A_REAL_TOKEN",
+        "APIKEYVALUE": "EXAMPLE_NOT_A_REAL_KEY_VALUE",
+        "dbPassWord": "EXAMPLE_NOT_A_REAL_PASSWORD",
+        "daemonKey": "EXAMPLE_NOT_A_REAL_KEY_VALUE",
+        "GITHUBPATVALUE": "EXAMPLE_NOT_A_REAL_PAT_VALUE"
+      }
+    },
+    "remote-token": {
+      "type": "http",
+      "url": "https://mcp.acme-tools.io/mcp",
+      "args": ["--dump", "headers"],
+      "env": { "X-API-Key": "${API_KEY}", "DB_PASSWORD": "correct horse battery staple" },
+      "headers": {
+        "Authorization": "Bearer EXAMPLEnotarealtoken0123456789abcdef",
+        "X-API-Key": "EXAMPLEnotarealkey0123456789abcdef",
+        "X-Request-Source": "acme-desktop-client"
+      }
+    },
+    "remote-codex": {
+      "url": "https://mcp.acme-tools.io/mcp",
+      "http_headers": { "proxy-authorization": "Basic EXAMPLEnotarealbasic0123456789" }
+    },
+    "remote-env": {
+      "type": "sse",
+      "url": "https://mcp.acme-tools.io/sse",
+      "env": {
+        "DB_URL_PASSWORD": "admin:EXAMPLEnotreal@${DB_HOST}",
+        "ACME_TOKEN": "${ACME_TOKEN:-EXAMPLEnotarealdefault}",
+        "GOOGLE_APPLICATION_CREDENTIALS": "${HOME}/keys/service-account.json",
+        "INFLUX_KEY_FILE": "${INFLUX_KEY_FILE:-$HOME/.influx/api-key}"
+      },
+      "headers": {
+        "Authorization": "Bearer ${API_TOKEN}",
+        "X-API-Key": "${env:API_KEY}",
+        "X-Auth-Token": "{env:AUTH_TOKEN}",
+        "Proxy-Authorization": "Basic <base64 user:password>",
+        "X-Api-Token": "ApiKey ${ACME_KEY}",
+        "X-Acme-Key": "<your acme key here>"
+      }
+    }
   }
 }

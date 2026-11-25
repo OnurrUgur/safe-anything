@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde_json::Value;
 
 use super::{FileInfo, Meta, Rule, Text, finding};
@@ -65,15 +67,6 @@ pub static RULES: &[Rule] = &[
         "Use the default or an accept-edits mode and allow specific commands instead of skipping all approvals."
     ),
     rule!(
-        "agent.unrestricted-shell",
-        High,
-        claude_settings,
-        r#""Bash(?:\(\*\)|\(:\*\))?""#,
-        None,
-        "Every shell command is pre-approved, so the agent can run anything without asking.",
-        "Allow specific commands, for example \"Bash(npm test:*)\"."
-    ),
-    rule!(
         "agent.mcp-auto-approve",
         High,
         claude_settings,
@@ -124,6 +117,11 @@ pub static RULES: &[Rule] = &[
 
 pub static STRUCTURED: &[(&str, Severity, &str)] = &[
     (
+        "agent.unrestricted-shell",
+        Severity::High,
+        "Every shell command is pre-approved, so the agent can run anything without asking.",
+    ),
+    (
         "agent.mcp-unpinned",
         Severity::Medium,
         "An MCP server is started from a package or image with no pinned version.",
@@ -152,12 +150,76 @@ pub fn structured(file: &FileInfo, text: &Text) -> Vec<Finding> {
         let Some(servers) = json.get(key).and_then(Value::as_object) else {
             continue;
         };
+        let positions = root_object(text.src)
+            .and_then(|root| object_keys(text.src, root).get(key).copied())
+            .and_then(|at| value_object(text.src, at))
+            .map(|at| object_keys(text.src, at))
+            .unwrap_or_default();
         for (name, server) in servers {
-            let start = text.src.find(&format!("\"{name}\"")).unwrap_or(0);
+            let start = positions
+                .get(name.as_str())
+                .copied()
+                .or_else(|| text.src.find(&format!("\"{name}\"")))
+                .unwrap_or(0);
             check_server(file, text, start, server, &mut out);
         }
     }
+    if claude_settings(file) {
+        check_claude_permissions(file, text, &json, &mut out);
+    }
     out
+}
+
+fn check_claude_permissions(file: &FileInfo, text: &Text, json: &Value, out: &mut Vec<Finding>) {
+    let Some(allow) = json
+        .get("permissions")
+        .and_then(|p| p.get("allow"))
+        .and_then(Value::as_array)
+    else {
+        return;
+    };
+    let perms_start = find_json_key(text.src, 0, "permissions").unwrap_or(0);
+    let mut cursor = find_json_key(text.src, perms_start, "allow").unwrap_or(perms_start);
+    for entry in allow.iter().filter_map(Value::as_str) {
+        if matches!(entry, "Bash" | "Bash(*)" | "Bash(:*)") {
+            let needle = format!("\"{entry}\"");
+            let at = match text.src[cursor..].find(&needle) {
+                Some(i) => {
+                    let pos = cursor + i;
+                    cursor = pos + needle.len();
+                    pos
+                }
+                None => cursor,
+            };
+            out.push(finding(
+                file,
+                text,
+                text.line_of(at),
+                Meta {
+                    id: "agent.unrestricted-shell",
+                    family: Family::Agent,
+                    severity: Severity::High,
+                    message: "Every shell command is pre-approved, so the agent can run anything without asking.",
+                    fix: "Allow specific commands, for example \"Bash(npm test:*)\".",
+                    secret: None,
+                },
+            ));
+        }
+    }
+}
+
+fn find_json_key(src: &str, start: usize, key: &str) -> Option<usize> {
+    let quoted = format!("\"{key}\"");
+    let mut pos = start;
+    while let Some(i) = src[pos..].find(&quoted) {
+        let key_pos = pos + i;
+        let after = key_pos + quoted.len();
+        if src[after..].trim_start().starts_with(':') {
+            return Some(key_pos);
+        }
+        pos = after;
+    }
+    None
 }
 
 fn check_server(
@@ -192,33 +254,45 @@ fn check_server(
             },
         ));
     }
-    for env_key in ["env", "environment"] {
-        let Some(env) = server.get(env_key).and_then(Value::as_object) else {
+    // Local servers get credentials in `env`; remote ones in `headers` (`http_headers` is Codex's
+    // name for it).
+    for (field, header) in [
+        ("env", false),
+        ("environment", false),
+        ("headers", true),
+        ("http_headers", true),
+    ] {
+        let Some(values) = server.get(field).and_then(Value::as_object) else {
             continue;
         };
-        for (k, v) in env {
+        // Find each key inside its own object, so the same name in `args`, in `env` or as a value
+        // does not take its line.
+        let field_keys = value_object(text.src, start)
+            .and_then(|at| object_keys(text.src, at).get(field).copied())
+            .and_then(|at| value_object(text.src, at))
+            .map(|at| object_keys(text.src, at))
+            .unwrap_or_default();
+        for (k, v) in values {
             let Some(v) = v.as_str() else { continue };
-            let secretish = {
-                let k = k.to_ascii_lowercase();
-                [
-                    "token",
-                    "key",
-                    "secret",
-                    "password",
-                    "pat",
-                    "auth",
-                    "credential",
-                ]
-                .iter()
-                .any(|s| k.contains(s))
-            };
-            if secretish
-                && v.len() >= 8
-                && !v.starts_with('$')
-                && !v.starts_with('<')
-                && !v.contains("{env:")
-            {
-                let line = line_after(text, start, &format!("\"{k}\""));
+            // `Authorization` and `Proxy-Authorization` are credential words in `secret_like_key`.
+            if secret_like_key(k) && !references_variable(v) {
+                let line = field_keys.get(k.as_str()).map_or_else(
+                    || line_after(text, start, &format!("\"{k}\"")),
+                    |&at| text.line_of(at),
+                );
+                let (message, fix) = if header {
+                    (
+                        format!(
+                            "The MCP server's {k} header is written in plain text in the config."
+                        ),
+                        "Reference an environment variable (\"${VAR}\", or \"Bearer ${VAR}\" for Authorization) and keep the value out of files that get shared or committed.",
+                    )
+                } else {
+                    (
+                        format!("The MCP server's {k} is written in plain text in the config."),
+                        "Reference an environment variable (\"${VAR}\") and keep the value out of files that get shared or committed.",
+                    )
+                };
                 out.push(finding(
                     file,
                     text,
@@ -227,8 +301,8 @@ fn check_server(
                         id: "agent.mcp-plaintext-secret",
                         family: Family::Agent,
                         severity: Severity::High,
-                        message: &format!("The MCP server's {k} is written in plain text in the config."),
-                        fix: "Reference an environment variable (\"${VAR}\") and keep the value out of files that get shared or committed.",
+                        message: &message,
+                        fix,
                         secret: Some(v),
                     },
                 ));
@@ -259,6 +333,168 @@ fn check_server(
         ));
         }
     }
+}
+
+/// Whether a value points at a credential kept elsewhere instead of holding one. After the auth
+/// scheme (`Bearer`, `Basic`, ...): it starts with `$` or `<`, or what is left once every
+/// `${VAR}` and `{env:VAR}` is taken out is shorter than 8 characters. So `Bearer ${TOKEN}`,
+/// `user:${PASSWORD}` and `<your token>` are skipped, and `admin:hunter2hunter2@${DB_HOST}` and
+/// `${TOKEN:-sk_live_default}` (a real default) are not.
+fn references_variable(value: &str) -> bool {
+    const SCHEMES: &[&str] = &[
+        "bearer", "basic", "token", "bot", "digest", "apikey", "oauth",
+    ];
+    let bare = value
+        .split_once(char::is_whitespace)
+        .filter(|(scheme, _)| SCHEMES.iter().any(|s| scheme.eq_ignore_ascii_case(s)))
+        .map_or(value, |(_, rest)| rest.trim_start());
+    // A value that starts with a variable is taken from the environment (`$TOKEN`,
+    // `${HOME}/key.json`), unless its default is a value of its own (`${TOKEN:-sk_live_...}`).
+    let has_default = bare
+        .strip_prefix("${")
+        .and_then(|r| r.split_once('}'))
+        .and_then(|(inner, _)| inner.split_once(":-"))
+        .is_some_and(|(_, default)| !references_variable(default));
+    if bare.starts_with('<') || value.starts_with('<') || (bare.starts_with('$') && !has_default) {
+        return true;
+    }
+    without_variables(bare).len() < 8
+}
+
+/// The value with each `${VAR}`, `${env:VAR}`, `${input:VAR}` and `{env:VAR}` taken out. A
+/// `${VAR:-default}` leaves its default, which may be a real value.
+fn without_variables(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(i) = rest.find(['$', '{']) {
+        out.push_str(&rest[..i]);
+        let after = &rest[i..];
+        let inner = after
+            .strip_prefix("${")
+            .or_else(|| after.strip_prefix("{env:"))
+            .and_then(|r| r.find('}').map(|end| (&r[..end], &r[end + 1..])));
+        match inner {
+            Some((inner, tail)) => {
+                let (name, default) = inner.split_once(":-").unwrap_or((inner, ""));
+                if is_variable_name(name) {
+                    out.push_str(default);
+                } else {
+                    out.push_str(&after[..after.len() - tail.len()]);
+                }
+                rest = tail;
+            }
+            // No `}` follows, so no later `${` closes either: keep the rest as it is. This also
+            // keeps the scan linear on a value full of unclosed `${`.
+            None if after.starts_with("${") || after.starts_with("{env:") => {
+                rest = after;
+                break;
+            }
+            None => {
+                out.push_str(&after[..1]);
+                rest = &after[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// `API_TOKEN`, or `env:API_TOKEN` / `input:api-token` (VS Code ids may hold `-` and `.`). A plain
+/// name is a shell name, so `${TOKEN-realvalue}` is not taken for one.
+fn is_variable_name(name: &str) -> bool {
+    let (name, extra): (&str, &[char]) = match name
+        .strip_prefix("env:")
+        .or_else(|| name.strip_prefix("input:"))
+    {
+        Some(id) => (id, &['_', '-', '.']),
+        None => (name, &['_']),
+    };
+    name.chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || extra.contains(&c))
+}
+
+/// Whether an env key names a credential. Each part of the key (split at every character that
+/// is not a letter or digit) is searched for the credential words, as before, except where the
+/// word only shows up as part of an ordinary one: a part that starts with `monkey`, `keyboard`
+/// or `author`, and `pat` in `path`, `patch` or `compat`. A camelCase word of its own always
+/// counts. So `PATH`, `DISPATCH_MODE`, `AUTHOR` and `MONKEY_PATCH` don't count, and
+/// `daemonKey`, `patHash`, `GITHUB_PAT` and `PATv2` do.
+fn secret_like_key(key: &str) -> bool {
+    // Found anywhere in a part, as on main: these don't hide inside ordinary words.
+    const ANYWHERE: &[&str] = &["token", "secret", "password", "credential"];
+    // Ordinary words that start a part and contain `key` or `auth`. Only taken out at the start,
+    // so `snapshotKey` and `apiKeyChain` still count.
+    const NOT_KEY: &[&str] = &[
+        "monkey",
+        "donkey",
+        "turkey",
+        "hockey",
+        "jockey",
+        "whiskey",
+        "lackey",
+        "latchkey",
+        "keychain",
+        "keyboard",
+        "keynote",
+        "keyword",
+        "keystroke",
+    ];
+    const NOT_AUTH: &[&str] = &["authority", "authorities", "authors", "author"];
+    let after_word = |part: &str, words: &[&str]| -> String {
+        let rest = words
+            .iter()
+            .find_map(|w| part.strip_prefix(w))
+            .unwrap_or(part);
+        rest.to_string()
+    };
+    key.split(|c: char| !c.is_alphanumeric())
+        .filter(|part| !part.is_empty())
+        .any(|original| {
+            let part = original.to_lowercase();
+            let part = part.as_str();
+            // `hotKey`, `patHash`, `gitlabComPat`: a camelCase word that is the credential word.
+            let camel = camel_words(original);
+            camel.iter().any(|w| {
+                let w = w.strip_suffix('s').unwrap_or(w);
+                matches!(w, "key" | "pat" | "auth")
+            }) || ANYWHERE.iter().any(|w| part.contains(w))
+                || after_word(part, NOT_KEY).contains("key")
+                // `authorization` and `authentication` start like `author` but are credentials.
+                || ["authoriz", "authoris", "authent"]
+                    .iter()
+                    .any(|w| part.contains(w))
+                || after_word(part, NOT_AUTH).contains("auth")
+                || pat_word(part)
+        })
+}
+
+/// The lower-case words of a camelCase part: `githubPatHash` gives `github`, `pat`, `hash`. A
+/// part with no lower-to-upper change (`GITHUBPAT`, `pythonpath`) is one word.
+fn camel_words(part: &str) -> Vec<String> {
+    let mut words = vec![String::new()];
+    let mut prev_lower = false;
+    for c in part.chars() {
+        if c.is_uppercase() && prev_lower {
+            words.push(String::new());
+        }
+        prev_lower = c.is_lowercase() || c.is_ascii_digit();
+        words.last_mut().unwrap().extend(c.to_lowercase());
+    }
+    words
+}
+
+/// Whether a lower-case part has `pat` other than inside `path`, `patch`, `pattern`, `patient`,
+/// `patron`, `patio`, `patent`, `spatial`, `spatula` or `compat`.
+fn pat_word(part: &str) -> bool {
+    const NOT_AFTER: &[&str] = &["h", "ch", "tern", "ien", "ron", "io", "ent", "ial", "ula"];
+    part.match_indices("pat").any(|(i, _)| {
+        let after = &part[i + 3..];
+        !part[..i].ends_with("com") && !NOT_AFTER.iter().any(|w| after.starts_with(w))
+    })
 }
 
 fn unpinned(argv: &[String]) -> Option<String> {
@@ -351,6 +587,88 @@ fn npm_pinned(pkg: &str) -> bool {
     }
 }
 
+/// The offset of each key of the object whose `{` is at `open` (the first one if a key repeats),
+/// skipping nested values, strings and comments. One pass, so looking up every server or every
+/// key of a large object stays linear.
+fn object_keys(src: &str, open: usize) -> HashMap<&str, usize> {
+    let b = src.as_bytes();
+    let mut keys = HashMap::new();
+    let mut i = open + 1;
+    let mut depth = 1usize;
+    while i < b.len() {
+        match b[i] {
+            b'"' => {
+                let Some(end) = string_end(b, i) else { break };
+                if depth == 1 && b[skip_blank(b, end + 1)..].first() == Some(&b':') {
+                    keys.entry(&src[i + 1..end]).or_insert(i);
+                }
+                i = end;
+            }
+            b'/' if b.get(i + 1) == Some(&b'/') => {
+                i = src[i..].find('\n').map_or(b.len(), |n| i + n);
+            }
+            b'/' if b.get(i + 1) == Some(&b'*') => {
+                i = src[i + 2..].find("*/").map_or(b.len(), |n| i + 3 + n);
+            }
+            b'{' | b'[' => depth += 1,
+            b'}' | b']' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    keys
+}
+
+/// The offset of the `{` that opens the file's top-level object, after any blank space and
+/// comments.
+fn root_object(src: &str) -> Option<usize> {
+    let b = src.as_bytes();
+    let mut i = 0;
+    loop {
+        i = skip_blank(b, i);
+        if b[i..].starts_with(b"//") {
+            i = src[i..].find('\n').map_or(b.len(), |n| i + n);
+        } else if b[i..].starts_with(b"/*") {
+            i = src[i + 2..].find("*/").map_or(b.len(), |n| i + 4 + n);
+        } else {
+            return (b.get(i) == Some(&b'{')).then_some(i);
+        }
+    }
+}
+
+/// The offset of the `{` that starts the value of the key at `key_at`, if it is an object.
+fn value_object(src: &str, key_at: usize) -> Option<usize> {
+    let b = src.as_bytes();
+    let colon = skip_blank(b, string_end(b, key_at)? + 1);
+    (b.get(colon) == Some(&b':')).then_some(())?;
+    let open = skip_blank(b, colon + 1);
+    (b.get(open) == Some(&b'{')).then_some(open)
+}
+
+fn string_end(b: &[u8], open: usize) -> Option<usize> {
+    let mut i = open + 1;
+    while i < b.len() {
+        match b[i] {
+            b'\\' => i += 2,
+            b'"' => return Some(i),
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+fn skip_blank(b: &[u8], mut i: usize) -> usize {
+    while i < b.len() && b[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    i
+}
+
 fn line_after(text: &Text, start: usize, needle: &str) -> usize {
     let at = text.src[start..]
         .find(needle)
@@ -400,4 +718,46 @@ fn strip_jsonc(src: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unrestricted_shell_only_flags_permissions_allow() {
+        let file = FileInfo::new(".claude/settings.json");
+
+        let safe = r#"{
+  "permissions": {
+    "allow": ["Read", "Bash(npm test:*)"],
+    "deny": ["Bash", "Bash(*)"],
+    "ask": ["Bash(:*)"]
+  },
+  "hooks": {
+    "PreToolUse": [{ "matcher": "Bash", "hooks": [] }]
+  }
+}"#;
+        assert!(structured(&file, &Text::new(safe)).is_empty());
+
+        let unsafe_cfg = r#"{
+  "permissions": {
+    "deny": ["allow", "Bash"],
+    "allow": [
+      "Read",
+      "Bash",
+      "Bash(*)",
+      "Bash(:*)"
+    ]
+  }
+}"#;
+        let findings = structured(&file, &Text::new(unsafe_cfg));
+        let lines: Vec<usize> = findings.iter().map(|f| f.line).collect();
+        assert_eq!(lines, vec![6, 7, 8]);
+        assert!(
+            findings
+                .iter()
+                .all(|f| f.rule == "agent.unrestricted-shell")
+        );
+    }
 }
