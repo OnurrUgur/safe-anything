@@ -19,6 +19,7 @@
   only part of an ordinary word, so `PATH`, `PYTHONPATH`, `NODE_PATH`, `DISPATCH_MODE`, `AUTHOR`,
   `MONKEY_PATCH` and `KEYCHAIN_PROFILE` are not reported. `GITHUB_PAT`, `githubPat`, `OPENAI_APIKEY`,
   `daemonKey`, `patHash` and `clientSecret` still are.
+- Agent: `agent.mcp-insecure-url` now reads a bracketed IPv6 host up to its closing `]` (only `[::1]` counts as local) and matches `http://` without regard to case.
 - Dependencies: `pubspec.lock` is read, so Dart and Flutter packages are checked against OSV.dev
   (`Pub` ecosystem). Packages from the `sdk` source, like `flutter`, are skipped.
 - Secrets: new rule `secret.gitlab-token` (critical) for GitLab personal access tokens (`glpat-` followed by 20 characters).
@@ -29,6 +30,9 @@
 - Code: new rule `code.open-redirect` (medium) for redirects built straight from request input (`res.redirect(req.query.next)`, `redirect(request.args.get("next"))`); a redirect to a fixed path stays unflagged.
 - Code: `code.sql-injection` also catches Go queries built by concatenation in `db.Query`, `db.QueryRow`, `db.Exec`
   and their `Context` variants (`db.Query("SELECT * FROM t WHERE id=" + id)`). A query with a placeholder stays unflagged.
+- Code: `code.ssrf` also covers Go (`http.Get`, `http.Head`, `http.Post` with `r.FormValue(...)` or `r.URL.Query().Get(...)`)
+  and PHP (`file_get_contents`, `curl_init`, `fopen` with `$_GET`, `$_POST` or `$_REQUEST`). A fixed URL stays unflagged.
+- Code: `code.open-redirect` now also matches a status code first, so `res.redirect(301, req.query.next)` is reported; a redirect to a fixed path stays unflagged.
 - Dependencies: `uv.lock` entries whose `source` is `editable`, `virtual` or `path` (the project itself or a
   local package) are no longer counted or looked up on PyPI.
 - Secrets: `secret.url-credentials` skips a connection string whose password is an angle-bracket placeholder
