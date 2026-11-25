@@ -24,6 +24,16 @@ pub fn fake(name: &str) -> String {
             &body(24, MIXED),
         ]
         .concat(),
+        "discord-webhook" => [
+            "https://disc",
+            "ord.com/api/webhooks/",
+            "1234567890",
+            "12345678/",
+            &body(34, MIXED),
+            "-",
+            &body(33, MIXED),
+        ]
+        .concat(),
         "stripe-live" => ["sk", "_live_", &body(24, MIXED)].concat(),
         "npm" => ["np", "m_", &body(36, MIXED)].concat(),
         "huggingface-token" => ["h", "f_", &body(34, LETTERS)].concat(),

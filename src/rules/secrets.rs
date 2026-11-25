@@ -125,6 +125,12 @@ pub static RULES: &[Rule] = &[
         "A Slack token is written in the file."
     ),
     secret!(
+        "secret.discord-webhook",
+        High,
+        r"https://(?:discord|discordapp)\.com/api/webhooks/([0-9]{17,20}/[A-Za-z0-9_\-]{60,})",
+        "A Discord webhook URL is written in the file."
+    ),
+    secret!(
         "secret.stripe-live-key",
         Critical,
         r"\b[sr]k_live_[A-Za-z0-9]{24,}",
