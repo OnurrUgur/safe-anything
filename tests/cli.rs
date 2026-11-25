@@ -210,3 +210,76 @@ fn secrets_are_redacted_in_every_output() {
         "only the value is masked:\n{out}"
     );
 }
+
+#[test]
+fn public_env_secret_value_is_redacted() {
+    // `secret.public-env-secret` matches the variable name; the value given to it must not be
+    // printed either, in any output.
+    let value = common::fake("db-password");
+    let dir = std::env::temp_dir().join(format!("safe-anything-public-env-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // One finding per line; every way of giving the name a value must hide that value.
+    let lines = [
+        format!("export NEXT_PUBLIC_STRIPE_SECRET_KEY=\"{value}\""),
+        format!("VITE_ADMIN_PASSWORD={value}"),
+        format!("NUXT_PUBLIC_SMTP_PASSWORD = \"{value} and more\""),
+        format!("GATSBY_API_SECRET=pa,ss;{value}"),
+        "PUBLIC_PIN_PASSWORD=zq7Kx".to_string(),
+        // A short value with a comment after it, a second name, a one-letter value.
+        "VITE_PIN_PASSWORD=Qv7k # dev pin".to_string(),
+        format!("VITE_A_SECRET=Jq9xW; VITE_B_SECRET={value}"),
+        "echo NEXT_PUBLIC_ECHO_SECRET e".to_string(),
+        // Values that start with, or are made of, operator and bracket characters.
+        "VITE_QM_PASSWORD=\"?Wz8k\"".to_string(),
+        "VITE_EQS_PASSWORD=\"====\"".to_string(),
+        "VITE_PUN_PASSWORD=\":;,\"".to_string(),
+        "VITE_BARE_PASSWORD=;,)]}".to_string(),
+        "ENV NEXT_PUBLIC_QUOTED_SECRET \":= 'Hk4w'\"".to_string(),
+        "VITE_COLON_PASSWORD:=Lm2z".to_string(),
+        format!("const NEXT_PUBLIC_API_SECRET: string = \"{value}\";"),
+        format!("$cfg = ['VITE_HASH_PASSWORD' => '{value}'];"),
+        format!("const k = process.env.VITE_FALLBACK_SECRET || \"{value}\";"),
+        format!("process.env[\"REACT_APP_IDX_SECRET\"] = \"{value}\";"),
+        format!("ENV NEXT_PUBLIC_DOCKER_SECRET {value}"),
+        format!("{{\"VITE_A_SECRET\": \"Jq9xW\", \"VITE_B_SECRET\": \"{value}\"}}"),
+        format!("if (NEXT_PUBLIC_CMP_SECRET === \"{value}\") {{}}"),
+        format!("REACT_APP_DB_PASSWORD: '{value}'"),
+        format!("{{\"EXPO_PUBLIC_SERVICE_ROLE\": \"{value}\"}}"),
+        // Nothing after the name but punctuation: printed as is, still reported.
+        "const key = process.env.NEXT_PUBLIC_OPENAI_KEY;".to_string(),
+        "NEXT_PUBLIC_EMPTY_SECRET=".to_string(),
+    ];
+    std::fs::write(dir.join("vars.sh"), lines.join("\n") + "\n").unwrap();
+    let path = dir.to_string_lossy().into_owned();
+    for extra in [None, Some("--json"), Some("--sarif")] {
+        let mut args = vec![path.as_str(), "--offline"];
+        args.extend(extra);
+        let (_, out) = run(&args);
+        assert!(!out.contains(&value), "value leaked with {args:?}:\n{out}");
+        for part in [
+            "and more", "pa,ss", "zq7Kx", "Qv7k", "Jq9x", "?Wz8", "\"====", ":;,", ";,)]}", "Hk4w",
+            "Lm2z", ":= '",
+        ] {
+            assert!(!out.contains(part), "{part:?} leaked with {args:?}:\n{out}");
+        }
+        assert!(
+            out.matches("secret.public-env-secret").count() >= lines.len(),
+            "findings missing with {args:?}:\n{out}"
+        );
+    }
+    let (_, out) = run(&[&path, "--offline"]);
+    for kept in [
+        "VITE_ADMIN_PASSWORD****\n",
+        "echo NEXT_PUBLIC_ECHO_SECRET ****\n",
+        "ENV NEXT_PUBLIC_DOCKER_SECRET ****\n",
+        "process.env.NEXT_PUBLIC_OPENAI_KEY;",
+        "NEXT_PUBLIC_EMPTY_SECRET=\n",
+    ] {
+        assert!(
+            out.contains(kept),
+            "{kept:?} expected in the output:\n{out}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

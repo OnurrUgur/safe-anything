@@ -13,6 +13,10 @@
 - Secrets: `secret.env-file` and `secret.env-example-value` now catch base64 values ending in `=` padding and
   passwords with `!@#$%^&*`. A value that is only `*` characters or starts with `$` (a reference like
   `$POSTGRES_PASSWORD`) is skipped.
+- Secrets: `secret.public-env-secret` now replaces everything after the variable name on its line with `****`
+  (`VITE_ADMIN_PASSWORD****`), so its finding no longer prints the value, however it is written (`=`, `:`, `=>`,
+  `||`, `ENV NAME value`, ...). Before, the whole line was printed as is. Masking now keeps at most a third of a
+  secret, so a short value is not printed whole.
 - Agent: an MCP config whose `npx` (or `pnpm dlx`) argument is empty or starts with a non-ASCII
   character no longer crashes the scan.
 - Agent: `agent.mcp-plaintext-secret` no longer takes an env key for a secret when its credential word is
