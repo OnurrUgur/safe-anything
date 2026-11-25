@@ -2,7 +2,7 @@
 
 Every rule safe-anything checks, generated from `safe-anything --list-rules --json`. Each links to the OWASP page that explains the problem and the fix.
 
-## Code (24)
+## Code (25)
 
 | Rule | Severity | CWE | OWASP | What it means |
 | --- | --- | --- | --- | --- |
@@ -17,6 +17,7 @@ Every rule safe-anything checks, generated from `safe-anything --list-rules --js
 | [`code.sql-injection`](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html) | high | [CWE-89](https://cwe.mitre.org/data/definitions/89.html) | A03:2021 Injection | A SQL query is built from variables by string formatting, so input can change the query (SQL injection). |
 | [`code.path-traversal`](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html) | high | [CWE-22](https://cwe.mitre.org/data/definitions/22.html) | A01:2021 Broken Access Control | A file path comes straight from the request, so ../ can reach any file on the server (path traversal). |
 | [`code.ssrf`](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html) | high | [CWE-918](https://cwe.mitre.org/data/definitions/918.html) | A10:2021 Server-Side Request Forgery | The server fetches a URL taken from the request, so users can reach internal services (SSRF). |
+| [`code.open-redirect`](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) | medium | [CWE-601](https://cwe.mitre.org/data/definitions/601.html) | A01:2021 Broken Access Control | The redirect target is taken from the request, so a crafted link can send users to any site from your domain (open redirect). |
 | [`code.tls-verify-off`](https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html) | medium | [CWE-295](https://cwe.mitre.org/data/definitions/295.html) | A02:2021 Cryptographic Failures | TLS certificate checks are turned off, so anyone on the network can read or change the traffic. |
 | [`code.weak-hash`](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) | low | [CWE-328](https://cwe.mitre.org/data/definitions/328.html) | A02:2021 Cryptographic Failures | MD5 and SHA-1 are broken for security use (collisions; too fast for passwords). |
 | [`code.weak-cipher`](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html) | medium | [CWE-327](https://cwe.mitre.org/data/definitions/327.html) | A02:2021 Cryptographic Failures | A weak cipher or ECB mode is used; ECB leaks patterns and DES/RC4 are broken. |
@@ -60,11 +61,11 @@ Every rule safe-anything checks, generated from `safe-anything --list-rules --js
 | Rule | Severity | CWE | OWASP | What it means |
 | --- | --- | --- | --- | --- |
 | [`agent.bypass-permissions`](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/) | high | [CWE-250](https://cwe.mitre.org/data/definitions/250.html) | LLM06:2025 Excessive Agency | The agent is set to run every action without asking, so one bad instruction can do anything on this machine. |
-| [`agent.unrestricted-shell`](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/) | high | [CWE-250](https://cwe.mitre.org/data/definitions/250.html) | LLM06:2025 Excessive Agency | Every shell command is pre-approved, so the agent can run anything without asking. |
 | [`agent.remote-script`](https://genai.owasp.org/llmrisk/llm032025-supply-chain/) | high | [CWE-494](https://cwe.mitre.org/data/definitions/494.html) | LLM03:2025 Supply Chain | A script is downloaded and run straight from the internet; whoever controls that URL controls this machine. |
 | [`agent.prompt-injection`](https://genai.owasp.org/llmrisk/llm01-prompt-injection/) | medium | [CWE-1427](https://cwe.mitre.org/data/definitions/1427.html) | LLM01:2025 Prompt Injection | Instruction text tells the agent to override its rules or hide actions from the user (prompt injection). |
 | [`agent.sensitive-file-access`](https://genai.owasp.org/llmrisk/llm022025-sensitive-information-disclosure/) | high | [CWE-200](https://cwe.mitre.org/data/definitions/200.html) | LLM02:2025 Sensitive Information Disclosure | Agent instructions read credential files such as SSH keys or cloud credentials. |
 | [`agent.hidden-unicode`](https://genai.owasp.org/llmrisk/llm01-prompt-injection/) | high | [CWE-1427](https://cwe.mitre.org/data/definitions/1427.html) | LLM01:2025 Prompt Injection | Invisible Unicode characters are in agent instructions; they can hide text the agent reads but you don't see. |
+| [`agent.unrestricted-shell`](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/) | high | [CWE-250](https://cwe.mitre.org/data/definitions/250.html) | LLM06:2025 Excessive Agency | Every shell command is pre-approved, so the agent can run anything without asking. |
 | [`agent.mcp-unpinned`](https://genai.owasp.org/llmrisk/llm032025-supply-chain/) | medium | [CWE-1357](https://cwe.mitre.org/data/definitions/1357.html) | LLM03:2025 Supply Chain | An MCP server is started from a package or image with no pinned version. |
 | [`agent.mcp-plaintext-secret`](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html) | high | [CWE-798](https://cwe.mitre.org/data/definitions/798.html) | LLM02:2025 Sensitive Information Disclosure | An MCP server's token or key is written in plain text in the config. |
 | [`agent.mcp-insecure-url`](https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html) | high | [CWE-319](https://cwe.mitre.org/data/definitions/319.html) | A02:2021 Cryptographic Failures | A remote MCP server is reached over plain HTTP. |
