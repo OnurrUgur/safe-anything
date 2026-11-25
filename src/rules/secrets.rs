@@ -167,6 +167,12 @@ pub static RULES: &[Rule] = &[
         "A Mailgun API key is written in the file."
     ),
     secret!(
+        "secret.sendgrid-key",
+        Critical,
+        r"\b(SG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43})(?:[^A-Za-z0-9_\-]|\z)",
+        "A SendGrid API key is written in the file."
+    ),
+    secret!(
         "secret.telegram-bot-token",
         High,
         r"\b([0-9]{8,10}:[A-Za-z0-9_\-]{35})(?:[^A-Za-z0-9_\-]|\z)",
