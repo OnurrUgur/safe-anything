@@ -313,10 +313,16 @@ fn check_server(
         .get("url")
         .or_else(|| server.get("serverUrl"))
         .and_then(Value::as_str)
-        && let Some(rest) = url.strip_prefix("http://")
+        && let Some(rest) = url
+            .get(..7)
+            .filter(|prefix| prefix.eq_ignore_ascii_case("http://"))
+            .map(|_| &url[7..])
     {
-        let host = rest.split(['/', ':']).next().unwrap_or("");
-        if !matches!(host, "localhost" | "127.0.0.1" | "[") && !host.starts_with("[::1") {
+        let host = match rest.find(']') {
+            Some(end) if rest.starts_with('[') => &rest[..end + 1],
+            _ => rest.split(['/', ':']).next().unwrap_or(""),
+        };
+        if !matches!(host, "localhost" | "127.0.0.1" | "[::1]") {
             let line = line_after(text, start, url);
             out.push(finding(
             file,
@@ -497,6 +503,89 @@ fn pat_word(part: &str) -> bool {
     })
 }
 
+/// Flags of `uvx` (`uv tool run`) and `pipx run` whose value is the next argument, so it is not
+/// taken for the package.
+const PYTHON_RUNNER_VALUE_FLAGS: &[&str] = &[
+    "-p",
+    "--python",
+    "--with-editable",
+    "--with-requirements",
+    "-c",
+    "--constraints",
+    "--overrides",
+    "--index",
+    "--default-index",
+    "-i",
+    "--index-url",
+    "--extra-index-url",
+    "-f",
+    "--find-links",
+    "--env-file",
+    "--directory",
+    "--project",
+    "--cache-dir",
+    "--config-file",
+    "--pip-args",
+];
+
+/// Flags of `docker run` and `podman run` whose value is the next argument, so it is not taken for
+/// the image.
+const CONTAINER_RUN_VALUE_FLAGS: &[&str] = &[
+    "-e",
+    "--env",
+    "--env-file",
+    "-v",
+    "--volume",
+    "--mount",
+    "-p",
+    "--publish",
+    "--name",
+    "--network",
+    "--net",
+    "-w",
+    "--workdir",
+    "-u",
+    "--user",
+    "--entrypoint",
+    "--platform",
+    "-h",
+    "--hostname",
+    "-l",
+    "--label",
+    "--add-host",
+    "-m",
+    "--memory",
+    "--cpus",
+    "--pull",
+    "--restart",
+    "--cap-add",
+    "--cap-drop",
+    "--device",
+    "--security-opt",
+    "--tmpfs",
+    "--gpus",
+];
+
+/// The first argument that is not a flag, not the value of one of `value_flags`, not empty and not
+/// one of `skip`.
+fn first_operand<'a>(
+    args: &'a [String],
+    value_flags: &[&str],
+    skip: &[&str],
+) -> Option<&'a String> {
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        if a.starts_with('-') {
+            if value_flags.contains(&a.as_str()) {
+                it.next();
+            }
+        } else if !a.is_empty() && !skip.contains(&a.as_str()) {
+            return Some(a);
+        }
+    }
+    None
+}
+
 fn unpinned(argv: &[String]) -> Option<String> {
     let cmd = argv.first()?;
     let base = cmd
@@ -506,30 +595,22 @@ fn unpinned(argv: &[String]) -> Option<String> {
         .trim_end_matches(".cmd")
         .trim_end_matches(".exe");
     let rest = &argv[1..];
-    let positional = |skip: &[&str]| {
-        rest.iter()
-            .find(|a| !a.is_empty() && !a.starts_with('-') && !skip.contains(&a.as_str()))
-            .cloned()
-    };
     match base {
         "npx" | "bunx" | "pnpx" => {
-            let pkg = positional(&[])?;
+            let pkg = first_operand(rest, &[], &[])?.clone();
             (!npm_pinned(&pkg)).then_some(pkg)
         }
         "pnpm" | "yarn" | "bun"
             if rest.first().map(String::as_str) == Some("dlx")
                 || rest.first().map(String::as_str) == Some("x") =>
         {
-            let pkg = rest[1..]
-                .iter()
-                .find(|a| !a.is_empty() && !a.starts_with('-'))
-                .cloned()?;
+            let pkg = first_operand(&rest[1..], &[], &[])?.clone();
             (!npm_pinned(&pkg)).then_some(pkg)
         }
         "uvx" | "pipx" => {
             let pkg = match rest.iter().position(|a| a == "--from") {
                 Some(i) => rest.get(i + 1).cloned()?,
-                None => positional(&["run"])?,
+                None => first_operand(rest, PYTHON_RUNNER_VALUE_FLAGS, &["run"])?.clone(),
             };
             (!(pkg.contains("==")
                 || pkg.contains('@')
@@ -539,28 +620,7 @@ fn unpinned(argv: &[String]) -> Option<String> {
         }
         "docker" | "podman" => {
             let i = rest.iter().position(|a| a == "run")?;
-            let mut it = rest[i + 1..].iter();
-            let image = loop {
-                let a = it.next()?;
-                if a.starts_with('-') {
-                    if matches!(
-                        a.as_str(),
-                        "-e" | "-v"
-                            | "-p"
-                            | "--env"
-                            | "--volume"
-                            | "--name"
-                            | "--network"
-                            | "-w"
-                            | "--mount"
-                            | "--env-file"
-                    ) {
-                        it.next();
-                    }
-                    continue;
-                }
-                break a.clone();
-            };
+            let image = first_operand(&rest[i + 1..], CONTAINER_RUN_VALUE_FLAGS, &[])?.clone();
             let last = image.rsplit('/').next().unwrap_or(&image);
             let pinned =
                 image.contains("@sha256:") || (last.contains(':') && !last.ends_with(":latest"));
@@ -723,6 +783,216 @@ fn strip_jsonc(src: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Runs every case and lists all that differ, as `argv: got X, want Y`.
+    fn check_unpinned(cases: &[(&[&str], Option<&str>)]) {
+        let wrong: Vec<String> = cases
+            .iter()
+            .filter_map(|(argv, want)| {
+                let argv_owned: Vec<String> = argv.iter().map(|a| a.to_string()).collect();
+                let got = unpinned(&argv_owned);
+                (got.as_deref() != *want).then(|| format!("{argv:?}: got {got:?}, want {want:?}"))
+            })
+            .collect();
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    #[test]
+    fn unpinned_reads_npm_runners() {
+        let cases: &[(&[&str], Option<&str>)] = &[
+            (
+                &["npx", "-y", "@modelcontextprotocol/server-github"],
+                Some("@modelcontextprotocol/server-github"),
+            ),
+            (&["npx", "-y", "@scope/pkg@1.2.3"], None),
+            (&["npx", "pkg"], Some("pkg")),
+            (&["npx", "pkg@1.2.3", "--port", "3000"], None),
+            (&["npx", "pkg@latest"], Some("pkg@latest")),
+            (&["npx", "pkg@^1.2.0"], Some("pkg@^1.2.0")),
+            (&["npx", "pkg@~1.2.0"], Some("pkg@~1.2.0")),
+            (&["npx", "pkg@next"], Some("pkg@next")),
+            (&["npx", "@scope/pkg@latest"], Some("@scope/pkg@latest")),
+            (&["npx", "--yes", "--", "pkg@2.0.0"], None),
+            (&["npx", "./tools/server.js"], None),
+            (&["npx", "/opt/tools/server"], None),
+            (&["npx"], None),
+            (&["npx", ""], None),
+            (&["npx", "é@1.0.0"], None),
+            (&["npx", "é"], Some("é")),
+            (&["bunx", "pkg"], Some("pkg")),
+            (&["pnpx", "pkg@1.0.0"], None),
+            (&["/usr/local/bin/npx", "pkg"], Some("pkg")),
+            (&[r"C:\Program Files\nodejs\npx.cmd", "pkg"], Some("pkg")),
+            (&["npx.exe", "pkg@1.0.0"], None),
+            (&["pnpm", "dlx", "pkg"], Some("pkg")),
+            (&["pnpm", "dlx", "-s", "@scope/pkg@1.0.0"], None),
+            (&["pnpm", "dlx", ""], None),
+            (&["pnpm", "dlx"], None),
+            (&["yarn", "dlx", "pkg"], Some("pkg")),
+            (&["bun", "x", "pkg"], Some("pkg")),
+            (&["bun", "x", "pkg@1.0.0"], None),
+            // Not a one-off runner.
+            (&["pnpm", "install", "pkg"], None),
+            (&["bun", "run", "server.ts"], None),
+            (&["node", "server.js"], None),
+            (&[], None),
+            (&[""], None),
+        ];
+        check_unpinned(cases);
+    }
+
+    #[test]
+    fn unpinned_reads_python_runners() {
+        let cases: &[(&[&str], Option<&str>)] = &[
+            (&["uvx", "mcp-server-fetch"], Some("mcp-server-fetch")),
+            (&["uvx", "mcp-server-fetch==2025.4.7"], None),
+            (&["uvx", "mcp-server-fetch@2025.4.7"], None),
+            (&["uvx", "pkg>=1.0"], Some("pkg>=1.0")),
+            (&["uvx", "pkg[extra]==1.0"], None),
+            (&["uvx", "--from", "pkg==1.0", "cmd"], None),
+            (&["uvx", "--from", "pkg", "cmd"], Some("pkg")),
+            (&["uvx", "--from", "./local", "cmd"], None),
+            (&["uvx", "--from", "/opt/tools/pkg", "cmd"], None),
+            (&["uvx", "--from"], None),
+            (&["uvx", "--python", "3.12", "pkg==1.0"], None),
+            (&["uvx", "-p", "3.12", "pkg"], Some("pkg")),
+            (&["uvx", "--python=3.12", "pkg"], Some("pkg")),
+            // `--with` is not read yet: its value is taken for the package, as on main, so an
+            // unpinned extra package is still reported (and a pinned one hides the main package).
+            (&["uvx", "--with", "httpx", "pkg==1.0"], Some("httpx")),
+            (
+                &[
+                    "uvx",
+                    "--index-url",
+                    "https://pypi.example/simple",
+                    "pkg==1.0",
+                ],
+                None,
+            ),
+            (&["uvx", ""], None),
+            (&["uvx"], None),
+            (&["uvx.exe", "pkg"], Some("pkg")),
+            (&["pipx", "run", "pkg"], Some("pkg")),
+            (&["pipx", "run", "pkg==1.0"], None),
+            (&["pipx", "run", "--python", "3.12", "pkg==1.0"], None),
+            (&["pipx", "run", "--spec", "pkg==1.0", "cmd"], None),
+        ];
+        check_unpinned(cases);
+    }
+
+    #[test]
+    fn unpinned_reads_container_runners() {
+        let cases: &[(&[&str], Option<&str>)] = &[
+            (
+                &["docker", "run", "-i", "--rm", "acme/mcp"],
+                Some("acme/mcp"),
+            ),
+            (&["docker", "run", "acme/mcp:1.0"], None),
+            (&["docker", "run", "--net", "host", "acme/mcp:1.0"], None),
+            (
+                &["docker", "run", "acme/mcp:latest"],
+                Some("acme/mcp:latest"),
+            ),
+            (&["docker", "run", "acme/mcp@sha256:0123abcd"], None),
+            (&["docker", "run", "ghcr.io/acme/mcp:1.0"], None),
+            (
+                &["docker", "run", "registry.example:5000/mcp"],
+                Some("registry.example:5000/mcp"),
+            ),
+            (&["docker", "run", "registry.example:5000/mcp:1.0"], None),
+            (
+                &[
+                    "docker",
+                    "run",
+                    "-e",
+                    "TOKEN",
+                    "-v",
+                    "/data:/data",
+                    "acme/mcp",
+                ],
+                Some("acme/mcp"),
+            ),
+            (&["docker", "run", "--env=TOKEN=x", "acme/mcp:1.0"], None),
+            (
+                &[
+                    "docker",
+                    "run",
+                    "--name",
+                    "mcp",
+                    "--network",
+                    "host",
+                    "acme/mcp:1.0",
+                ],
+                None,
+            ),
+            (&["docker", "run", "--user", "1000", "acme/mcp:1.0"], None),
+            (
+                &["docker", "run", "-u", "1000:1000", "acme/mcp"],
+                Some("acme/mcp"),
+            ),
+            (
+                &["docker", "run", "--platform", "linux/amd64", "acme/mcp:1.0"],
+                None,
+            ),
+            (
+                &["docker", "run", "--entrypoint", "/bin/sh", "acme/mcp:1.0"],
+                None,
+            ),
+            (
+                &[
+                    "docker",
+                    "run",
+                    "-i",
+                    "acme/mcp:1.0",
+                    "serve",
+                    "--port",
+                    "80",
+                ],
+                None,
+            ),
+            (&["docker", "run", "", "acme/mcp:1.0"], None),
+            (&["docker", "run"], None),
+            (&["docker", "run", "-i"], None),
+            (&["docker", "pull", "acme/mcp"], None),
+            (&["docker"], None),
+            (&["podman", "run", "--rm", "acme/mcp"], Some("acme/mcp")),
+            (&["podman", "run", "--user", "1000", "acme/mcp:1.0"], None),
+            (&["docker.exe", "run", "acme/mcp"], Some("acme/mcp")),
+        ];
+        check_unpinned(cases);
+    }
+
+    #[test]
+    fn npm_pinned_needs_a_version_after_the_name() {
+        for pkg in [
+            "pkg@1.2.3",
+            "@scope/pkg@1.2.3",
+            "pkg@0.0.1-beta.1",
+            "./local",
+            "/abs/path",
+            "é@1.0.0",
+        ] {
+            assert!(npm_pinned(pkg), "{pkg}");
+        }
+        for pkg in [
+            "",
+            "@",
+            "p",
+            "é",
+            "pkg",
+            "pkg@",
+            "pkg@latest",
+            "pkg@next",
+            "pkg@^1.2.3",
+            "pkg@~1.2.3",
+            "pkg@>=1",
+            "@scope/pkg",
+            "@scope/pkg@",
+            "@scope/pkg@latest",
+        ] {
+            assert!(!npm_pinned(pkg), "{pkg}");
+        }
+    }
 
     #[test]
     fn unrestricted_shell_only_flags_permissions_allow() {
