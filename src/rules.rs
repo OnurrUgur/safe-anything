@@ -119,6 +119,10 @@ impl<'a> Text<'a> {
         self.starts.partition_point(|&s| s <= offset)
     }
 
+    pub fn line_start(&self, n: usize) -> usize {
+        self.starts[n - 1]
+    }
+
     pub fn line(&self, n: usize) -> &'a str {
         let start = self.starts[n - 1];
         let end = self.starts.get(n).map(|e| e - 1).unwrap_or(self.src.len());
@@ -230,7 +234,8 @@ pub fn check(file: &FileInfo, src: &str, include_tests: bool) -> Vec<Finding> {
             }
         }
     }
-    out.retain(|f| config::keep(file, &text, f));
+    let mut hcl = config::HclWalk::default();
+    out.retain(|f| config::keep(file, &text, f, &mut hcl));
     for f in agent::structured(file, &text)
         .into_iter()
         .filter(|_| !test_file)
