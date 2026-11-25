@@ -55,12 +55,13 @@ Every rule safe-anything checks, generated from `safe-anything --list-rules --js
 | [`secret.public-env-secret`](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html) | high | [CWE-200](https://cwe.mitre.org/data/definitions/200.html) | A05:2021 Security Misconfiguration | A secret is given a public env prefix, so the build ships it inside the client bundle where anyone can read it. |
 | [`secret.env-not-ignored`](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html) | medium | [CWE-538](https://cwe.mitre.org/data/definitions/538.html) | A05:2021 Security Misconfiguration | The project has env files but .gitignore does not exclude .env, so real secrets are one git add away from the repository. |
 
-## Agent setups (9)
+## Agent setups (10)
 
 | Rule | Severity | CWE | OWASP | What it means |
 | --- | --- | --- | --- | --- |
 | [`agent.bypass-permissions`](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/) | high | [CWE-250](https://cwe.mitre.org/data/definitions/250.html) | LLM06:2025 Excessive Agency | The agent is set to run every action without asking, so one bad instruction can do anything on this machine. |
 | [`agent.unrestricted-shell`](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/) | high | [CWE-250](https://cwe.mitre.org/data/definitions/250.html) | LLM06:2025 Excessive Agency | Every shell command is pre-approved, so the agent can run anything without asking. |
+| [`agent.mcp-auto-approve`](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/) | high | [CWE-829](https://cwe.mitre.org/data/definitions/829.html) | LLM06:2025 Excessive Agency | Claude Code starts every MCP server in the project's .mcp.json without asking about each one, so a cloned repository's servers can run commands on this machine. |
 | [`agent.remote-script`](https://genai.owasp.org/llmrisk/llm032025-supply-chain/) | high | [CWE-494](https://cwe.mitre.org/data/definitions/494.html) | LLM03:2025 Supply Chain | A script is downloaded and run straight from the internet; whoever controls that URL controls this machine. |
 | [`agent.prompt-injection`](https://genai.owasp.org/llmrisk/llm01-prompt-injection/) | medium | [CWE-1427](https://cwe.mitre.org/data/definitions/1427.html) | LLM01:2025 Prompt Injection | Instruction text tells the agent to override its rules or hide actions from the user (prompt injection). |
 | [`agent.sensitive-file-access`](https://genai.owasp.org/llmrisk/llm022025-sensitive-information-disclosure/) | high | [CWE-200](https://cwe.mitre.org/data/definitions/200.html) | LLM02:2025 Sensitive Information Disclosure | Agent instructions read credential files such as SSH keys or cloud credentials. |

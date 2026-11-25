@@ -154,6 +154,9 @@ pub fn of(id: &str) -> Refs {
         "agent.bypass-permissions" | "agent.unrestricted-shell" => {
             r!("CWE-250", "LLM06:2025 Excessive Agency", url "https://genai.owasp.org/llmrisk/llm062025-excessive-agency/")
         }
+        "agent.mcp-auto-approve" => {
+            r!("CWE-829", "LLM06:2025 Excessive Agency", url "https://genai.owasp.org/llmrisk/llm062025-excessive-agency/")
+        }
         "agent.remote-script" => {
             r!("CWE-494", "LLM03:2025 Supply Chain", url "https://genai.owasp.org/llmrisk/llm032025-supply-chain/")
         }

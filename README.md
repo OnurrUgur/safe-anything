@@ -20,7 +20,7 @@ Every finding comes with the line, the reason and the fix.</p>
   <a href="https://github.com/erkamyaman/safe-anything"><img src="https://img.shields.io/github/stars/erkamyaman/safe-anything?style=social" alt="GitHub stars"></a>
 </p>
 
-<p align="center"><b><a href="#quick-start">Install</a></b> · <a href="https://github.com/erkamyaman/safe-anything/releases">Releases</a> · <a href="#for-ai-agents">Claude Code plugin</a> · <a href="#in-ci">GitHub Action</a> · <a href="docs/rules.md">All 77 rules</a> · <a href="docs/agent-setups.md">Agent setups</a><br>
+<p align="center"><b><a href="#quick-start">Install</a></b> · <a href="https://github.com/erkamyaman/safe-anything/releases">Releases</a> · <a href="#for-ai-agents">Claude Code plugin</a> · <a href="#in-ci">GitHub Action</a> · <a href="docs/rules.md">All 78 rules</a> · <a href="docs/agent-setups.md">Agent setups</a><br>
 Made in Türkiye 🇹🇷 by <a href="https://github.com/erkamyaman">erKam Yaman</a>, who also made <a href="https://github.com/erkamyaman/rust-anything">rust-anything</a> · <a href="https://github.com/sponsors/erkamyaman">❤️ Sponsor me</a> · Sponsored by <a href="https://coderabbit.link/er-kam">CodeRabbit</a></p>
 
 <p align="center">
@@ -86,14 +86,14 @@ safe-anything --list-rules
 
 ## What it finds
 
-77 rules, each with a CWE id, an OWASP category and a link to the OWASP page that explains it.
+78 rules, each with a CWE id, an OWASP category and a link to the OWASP page that explains it.
 The full list is in [docs/rules.md](docs/rules.md).
 
 | | |
 | --- | --- |
 | **Code** | SQL injection, command injection, XSS (`innerHTML`, `dangerouslySetInnerHTML`, `v-html`, `echo $_GET`, `raw`), `eval` and `new Function`, path traversal, SSRF, unsafe deserialization (pickle, `yaml.load`, `ObjectInputStream`, `BinaryFormatter`, `unserialize`, `Marshal`), TLS checks turned off, MD5/SHA-1, DES/RC4/ECB, JWT `none`, template injection, debug mode, insecure cookies, `Math.random` tokens. JS/TS, Python, Go, Java, Kotlin, PHP, Ruby, C#, SQL |
 | **Secrets** | AWS, GitHub, Slack, Stripe, OpenAI, Anthropic and Google keys, private keys, passwords in code, credentials in connection strings, committed `.env` files, real values in `.env.example`, a `.gitignore` that misses `.env`, secrets behind public prefixes (`NEXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`) that ship in the client bundle |
-| **Agent setups** | `bypassPermissions` and `--dangerously-skip-permissions`, pre-approved `Bash`, MCP servers run with unpinned `npx`/`uvx`/`docker`, MCP tokens in plain text, remote MCP over `http://`, `curl \| sh` in hooks and skills, prompt-injection text, skills that read `~/.ssh` or cloud credentials, invisible Unicode in instructions. [More](docs/agent-setups.md) |
+| **Agent setups** | `bypassPermissions` and `--dangerously-skip-permissions`, pre-approved `Bash`, `enableAllProjectMcpServers`, MCP servers run with unpinned `npx`/`uvx`/`docker`, MCP tokens in plain text, remote MCP over `http://`, `curl \| sh` in hooks and skills, prompt-injection text, skills that read `~/.ssh` or cloud credentials, invisible Unicode in instructions. [More](docs/agent-setups.md) |
 | **Mobile** | Android `debuggable`, cleartext traffic, exported content providers, WebView file access and JS bridges, world-readable files; iOS ATS turned off; tokens in UserDefaults, SharedPreferences, AsyncStorage or localStorage |
 | **Config** | Docker (unpinned base, root, secrets in `ENV`, `ADD <url>`), GitHub Actions (`pull_request_target`, `write-all`, actions on `@main`, script injection from PR titles), privileged containers, `hostNetwork`, open Terraform ingress, public buckets, nginx autoindex, TLS 1.0/1.1 |
 | **Dependencies** | every locked version in `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock`, `requirements*.txt`, `poetry.lock`, `uv.lock`, `pdm.lock`, `go.mod`, `Gemfile.lock`, `composer.lock` and `pubspec.lock`, checked against [OSV.dev](https://osv.dev), with the nearest fixed version |
@@ -175,7 +175,7 @@ lockfile listed under Dependencies. Nothing is executed. The only network call i
 names and versions to OSV.dev ([privacy](docs/privacy.md)).
 
 It finds known patterns; it does not trace data through your program. A clean scan means none of
-these 77 problems were found, not that the code is safe. [Design notes](docs/adr).
+these 78 problems were found, not that the code is safe. [Design notes](docs/adr).
 
 ## Credits
 

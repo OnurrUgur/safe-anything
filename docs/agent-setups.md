@@ -20,6 +20,7 @@ decide what they may do are code, and safe-anything checks them like code.
 | Rule | Example | Why |
 | --- | --- | --- |
 | `agent.bypass-permissions` | `"defaultMode": "bypassPermissions"`, `--dangerously-skip-permissions`, `sandbox_mode = "danger-full-access"` | one bad instruction can do anything on the machine |
+| `agent.mcp-auto-approve` | `"enableAllProjectMcpServers": true` in `.claude/settings.json` | every server in a cloned repository's `.mcp.json` starts without asking about each one |
 | `agent.unrestricted-shell` | `"allow": ["Bash"]` | every shell command is pre-approved |
 | `agent.mcp-unpinned` | `"command": "npx", "args": ["-y", "some-mcp-server"]` | every start runs whatever was published last; a hijacked package runs with your access |
 | `agent.mcp-plaintext-secret` | `"env": { "GITHUB_TOKEN": "ghp_..." }` | the token travels with the file |

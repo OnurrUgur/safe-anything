@@ -22,6 +22,9 @@
   such as `mongodb+srv://<username>:<password>@host/db`, the form MongoDB Atlas shows in its docs.
 - Dependencies: `pnpm-lock.yaml` is read again. A blank line ended the `packages:` section, and
   pnpm writes one right after it, so every pnpm project reported 0 packages checked.
+- Agent: new rule `agent.mcp-auto-approve` (high) for `"enableAllProjectMcpServers": true` in
+  `.claude/settings*.json`, which starts every MCP server in the project's `.mcp.json` without asking about
+  each one.
 
 ## 1.0.2 (2026-11-23)
 
