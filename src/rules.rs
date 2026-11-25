@@ -128,6 +128,10 @@ impl<'a> Text<'a> {
         self.starts.partition_point(|&s| s <= offset)
     }
 
+    pub fn line_start(&self, n: usize) -> usize {
+        self.starts[n - 1]
+    }
+
     pub fn line(&self, n: usize) -> &'a str {
         let start = self.starts[n - 1];
         let end = self.starts.get(n).map(|e| e - 1).unwrap_or(self.src.len());
@@ -269,6 +273,15 @@ pub struct Meta<'a> {
 pub fn finding(file: &FileInfo, text: &Text, line: usize, meta: Meta) -> Finding {
     let raw = text.line(line).trim();
     let snippet = match meta.secret {
+        // A name-only rule's "secret" is the rest of the line after the name: hide all of it
+        // (operators and quotes too, as they can be part of the value), only at the line's end.
+        Some(rest) if !rest.is_empty() && secrets::NAME_ONLY.contains(&meta.id) => {
+            match raw.strip_suffix(rest) {
+                Some(before) => shorten(&format!("{before}****")),
+                // Not expected: the rest of the line should end the line. Print nothing of it.
+                None => "****".to_string(),
+            }
+        }
         Some(secret) if !secret.is_empty() => shorten(&raw.replace(secret, &mask(secret))),
         _ => shorten(raw),
     };
@@ -292,8 +305,25 @@ fn shorten(s: &str) -> String {
     }
 }
 
+/// Everything after a variable name on its own line, as the part to hide. The value may be
+/// written in many ways (`=v`, `: v`, `=> 'v'`, `|| "v"`, `"] = "v"`, `ENV NAME v`), so all of
+/// it is hidden rather than parsed. None when nothing is assigned: nothing follows, only `=` or
+/// `:` with nothing after it (`NAME=`), or only closing punctuation without any `=` or `:`
+/// (`NAME;`, `process.env.NAME)`, `env["NAME"]`).
+fn after_name(rest: &str) -> Option<&str> {
+    let tail = rest.lines().next().unwrap_or("").trim();
+    let nothing = matches!(tail, "" | "=" | ":")
+        || tail
+            .chars()
+            .all(|c| c.is_whitespace() || ";,)]}\"'`".contains(c));
+    (!nothing).then_some(tail)
+}
+
+/// The secret with all but its start hidden. At most 4 characters are kept, and never more
+/// than a third of the value, so a short password is not printed whole.
 fn mask(secret: &str) -> String {
-    let keep: String = secret.chars().take(4).collect();
+    let n = secret.chars().count();
+    let keep: String = secret.chars().take(4.min(n / 3)).collect();
     format!("{keep}****")
 }
 
@@ -312,19 +342,25 @@ pub fn check(file: &FileInfo, src: &str, include_tests: bool) -> Vec<Finding> {
         }
         for caps in c.re.captures_iter(src) {
             let m = caps.get(0).expect("whole match");
-            let secret = (c.rule.family == Family::Secret
-                && !secrets::NAME_ONLY.contains(&c.rule.id))
-            .then(|| {
-                caps.iter()
-                    .skip(1)
-                    .flatten()
-                    .last()
-                    .unwrap_or(m)
-                    .as_str()
-                    .lines()
-                    .next()
-                    .unwrap_or("")
-            });
+            // A name-only rule matches a variable name; what follows it on the line holds the
+            // value. It is read only for the finding that is kept (one per rule and line), so a
+            // long line with many names is not read again for each of them.
+            let name_only = secrets::NAME_ONLY.contains(&c.rule.id);
+            let secret = if c.rule.family != Family::Secret || name_only {
+                None
+            } else {
+                Some(
+                    caps.iter()
+                        .skip(1)
+                        .flatten()
+                        .last()
+                        .unwrap_or(m)
+                        .as_str()
+                        .lines()
+                        .next()
+                        .unwrap_or(""),
+                )
+            };
             let line = text.line_of(m.start());
             if text.suppressed(line, c.rule.id) {
                 continue;
@@ -350,13 +386,18 @@ pub fn check(file: &FileInfo, src: &str, include_tests: bool) -> Vec<Finding> {
                         severity: c.rule.severity,
                         message: c.rule.message,
                         fix: c.rule.fix,
-                        secret,
+                        secret: if name_only {
+                            after_name(&src[m.end()..])
+                        } else {
+                            secret
+                        },
                     },
                 ));
             }
         }
     }
-    out.retain(|f| config::keep(file, &text, f));
+    let mut hcl = config::HclWalk::default();
+    out.retain(|f| config::keep(file, &text, f, &mut hcl));
     for f in agent::structured(file, &text)
         .into_iter()
         .filter(|_| !test_file)
