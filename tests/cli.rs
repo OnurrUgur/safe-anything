@@ -106,6 +106,7 @@ fn every_rule_has_a_cwe_and_a_reference() {
                 .is_some_and(|u| u.starts_with("https://")),
             "{r}"
         );
+        assert!(r["fix"].as_str().is_some_and(|f| !f.is_empty()), "{r}");
     }
 }
 
@@ -131,13 +132,71 @@ fn sarif_output_for_code_scanning() {
             .unwrap()
             >= 1
     );
-    assert!(
-        run["tool"]["driver"]["rules"]
-            .as_array()
+    let rules = run["tool"]["driver"]["rules"].as_array().unwrap();
+    assert!(rules.iter().any(|d| d["id"] == r["ruleId"]));
+    for d in rules {
+        let text = |v: &serde_json::Value| v.as_str().filter(|s| !s.is_empty()).is_some();
+        assert!(text(&d["fullDescription"]["text"]), "{d}");
+        assert!(text(&d["help"]["text"]), "{d}");
+        assert!(text(&d["help"]["markdown"]), "{d}");
+        for field in ["text", "markdown"] {
+            let help = d["help"][field].as_str().unwrap();
+            assert!(help.contains("CWE-"), "{d}");
+            assert!(help.contains(d["helpUri"].as_str().unwrap()), "{d}");
+        }
+    }
+}
+
+#[test]
+fn sarif_rule_help_has_the_fix() {
+    let (_, out) = run(&[&fixture("agent"), "--sarif", "--offline"]);
+    let sarif: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let rules = sarif["runs"][0]["tool"]["driver"]["rules"]
+        .as_array()
+        .unwrap();
+    let shell = rules
+        .iter()
+        .find(|d| d["id"] == "agent.unrestricted-shell")
+        .expect("agent.unrestricted-shell in the agent fixture");
+    let help = shell["help"]["text"].as_str().unwrap();
+    assert!(help.contains("Allow specific commands"), "{shell}");
+    assert!(help.contains("LLM06:2025 Excessive Agency"), "{shell}");
+    let markdown = shell["help"]["markdown"].as_str().unwrap();
+    assert!(markdown.contains("Bash(npm test:\\*)"), "{shell}");
+}
+
+#[test]
+fn sarif_paths_are_relative_to_the_working_directory() {
+    let dir = std::env::temp_dir().join(format!("safe-anything-sarif-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("app/src")).unwrap();
+    std::fs::write(dir.join("app/src/x.js"), "eval(req.query.code);\n").unwrap();
+    let uri = |cwd: &Path, args: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_safe-anything"))
+            .args(args)
+            .args(["--sarif", "--offline"])
+            .current_dir(cwd)
+            .output()
+            .unwrap();
+        let sarif: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]
+            ["uri"]
+            .as_str()
             .unwrap()
-            .iter()
-            .any(|d| d["id"] == r["ruleId"])
+            .to_string()
+    };
+    assert_eq!(uri(&dir, &["app"]), "app/src/x.js");
+    assert_eq!(uri(&dir, &["./app/"]), "app/src/x.js");
+    assert_eq!(uri(&dir, &["app/src/x.js"]), "app/src/x.js");
+    assert_eq!(
+        uri(&dir, &[dir.join("app").to_str().unwrap()]),
+        "app/src/x.js"
     );
+    assert_eq!(uri(&dir.join("app"), &["."]), "src/x.js");
+    assert_eq!(uri(&dir.join("app/src"), &["../src"]), "x.js");
+    // The terminal report keeps paths relative to the scanned folder.
+    let (_, out) = run(&[dir.join("app").to_str().unwrap(), "--offline"]);
+    assert!(out.contains(" src/x.js:1 "), "{out}");
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -311,6 +370,12 @@ fn secrets_are_redacted_in_every_output() {
     let token_tail = &token[token.len() - 16..];
     let password = common::fake("password");
     let aws = common::fake("aws");
+    let key_json = common::fake("private-key-json");
+    let key_parts: Vec<&str> = key_json
+        .split("\\n")
+        .filter(|part| !part.contains("PRIVATE KEY") && !part.is_empty())
+        .collect();
+    assert_eq!(key_parts.len(), 3);
     for args in [
         vec![fixture("agent"), "--offline".into()],
         vec![fixture("agent"), "--offline".into(), "--json".into()],
@@ -322,6 +387,12 @@ fn secrets_are_redacted_in_every_output() {
         assert!(!out.contains(token_tail), "token leaked with {args:?}");
         assert!(!out.contains(&password), "password leaked with {args:?}");
         assert!(!out.contains(&aws[4..]), "AWS key leaked with {args:?}");
+        for part in &key_parts {
+            assert!(
+                !out.contains(&part[4..]),
+                "private key leaked with {args:?}"
+            );
+        }
     }
     let (_, out) = run(&[&fixture("agent"), "--offline"]);
     assert!(
