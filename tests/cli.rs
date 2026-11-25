@@ -483,30 +483,42 @@ fn public_env_secret_value_is_redacted() {
     let dir = std::env::temp_dir().join(format!("safe-anything-public-env-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
+    // Short values are joined from parts too, so the source holds no assignment that reads as a
+    // real password.
+    let (pin, pin2, first) = (
+        ["zq", "7Kx"].concat(),
+        ["Qv", "7k"].concat(),
+        ["Jq", "9xW"].concat(),
+    );
+    let (qm, quoted, colon) = (
+        ["?W", "z8k"].concat(),
+        ["Hk", "4w"].concat(),
+        ["Lm", "2z"].concat(),
+    );
     // One finding per line; every way of giving the name a value must hide that value.
     let lines = [
         format!("export NEXT_PUBLIC_STRIPE_SECRET_KEY=\"{value}\""),
         format!("VITE_ADMIN_PASSWORD={value}"),
         format!("NUXT_PUBLIC_SMTP_PASSWORD = \"{value} and more\""),
         format!("GATSBY_API_SECRET=pa,ss;{value}"),
-        "PUBLIC_PIN_PASSWORD=zq7Kx".to_string(),
+        format!("PUBLIC_PIN_PASSWORD={pin}"),
         // A short value with a comment after it, a second name, a one-letter value.
-        "VITE_PIN_PASSWORD=Qv7k # dev pin".to_string(),
-        format!("VITE_A_SECRET=Jq9xW; VITE_B_SECRET={value}"),
+        format!("VITE_PIN_PASSWORD={pin2} # dev pin"),
+        format!("VITE_A_SECRET={first}; VITE_B_SECRET={value}"),
         "echo NEXT_PUBLIC_ECHO_SECRET e".to_string(),
         // Values that start with, or are made of, operator and bracket characters.
-        "VITE_QM_PASSWORD=\"?Wz8k\"".to_string(),
+        format!("VITE_QM_PASSWORD=\"{qm}\""),
         "VITE_EQS_PASSWORD=\"====\"".to_string(),
         "VITE_PUN_PASSWORD=\":;,\"".to_string(),
         "VITE_BARE_PASSWORD=;,)]}".to_string(),
-        "ENV NEXT_PUBLIC_QUOTED_SECRET \":= 'Hk4w'\"".to_string(),
-        "VITE_COLON_PASSWORD:=Lm2z".to_string(),
+        format!("ENV NEXT_PUBLIC_QUOTED_SECRET \":= '{quoted}'\""),
+        format!("VITE_COLON_PASSWORD:={colon}"),
         format!("const NEXT_PUBLIC_API_SECRET: string = \"{value}\";"),
         format!("$cfg = ['VITE_HASH_PASSWORD' => '{value}'];"),
         format!("const k = process.env.VITE_FALLBACK_SECRET || \"{value}\";"),
         format!("process.env[\"REACT_APP_IDX_SECRET\"] = \"{value}\";"),
         format!("ENV NEXT_PUBLIC_DOCKER_SECRET {value}"),
-        format!("{{\"VITE_A_SECRET\": \"Jq9xW\", \"VITE_B_SECRET\": \"{value}\"}}"),
+        format!("{{\"VITE_A_SECRET\": \"{first}\", \"VITE_B_SECRET\": \"{value}\"}}"),
         format!("if (NEXT_PUBLIC_CMP_SECRET === \"{value}\") {{}}"),
         format!("REACT_APP_DB_PASSWORD: '{value}'"),
         format!("{{\"EXPO_PUBLIC_SERVICE_ROLE\": \"{value}\"}}"),
