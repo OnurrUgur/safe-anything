@@ -189,21 +189,7 @@ fn check_server(
         };
         for (k, v) in env {
             let Some(v) = v.as_str() else { continue };
-            let secretish = {
-                let k = k.to_ascii_lowercase();
-                [
-                    "token",
-                    "key",
-                    "secret",
-                    "password",
-                    "pat",
-                    "auth",
-                    "credential",
-                ]
-                .iter()
-                .any(|s| k.contains(s))
-            };
-            if secretish
+            if secret_like_key(k)
                 && v.len() >= 8
                 && !v.starts_with('$')
                 && !v.starts_with('<')
@@ -250,6 +236,86 @@ fn check_server(
         ));
         }
     }
+}
+
+/// Whether an env key names a credential. Each part of the key (split at every character that
+/// is not a letter or digit) is searched for the credential words, as before, except where the
+/// word only shows up as part of an ordinary one: a part that starts with `monkey`, `keyboard`
+/// or `author`, and `pat` in `path`, `patch` or `compat`. A camelCase word of its own always
+/// counts. So `PATH`, `DISPATCH_MODE`, `AUTHOR` and `MONKEY_PATCH` don't count, and
+/// `daemonKey`, `patHash`, `GITHUB_PAT` and `PATv2` do.
+fn secret_like_key(key: &str) -> bool {
+    // Found anywhere in a part, as on main: these don't hide inside ordinary words.
+    const ANYWHERE: &[&str] = &["token", "secret", "password", "credential"];
+    // Ordinary words that start a part and contain `key` or `auth`. Only taken out at the start,
+    // so `snapshotKey` and `apiKeyChain` still count.
+    const NOT_KEY: &[&str] = &[
+        "monkey",
+        "donkey",
+        "turkey",
+        "hockey",
+        "jockey",
+        "whiskey",
+        "lackey",
+        "latchkey",
+        "keychain",
+        "keyboard",
+        "keynote",
+        "keyword",
+        "keystroke",
+    ];
+    const NOT_AUTH: &[&str] = &["authority", "authorities", "authors", "author"];
+    let after_word = |part: &str, words: &[&str]| -> String {
+        let rest = words
+            .iter()
+            .find_map(|w| part.strip_prefix(w))
+            .unwrap_or(part);
+        rest.to_string()
+    };
+    key.split(|c: char| !c.is_alphanumeric())
+        .filter(|part| !part.is_empty())
+        .any(|original| {
+            let part = original.to_lowercase();
+            let part = part.as_str();
+            // `hotKey`, `patHash`, `gitlabComPat`: a camelCase word that is the credential word.
+            let camel = camel_words(original);
+            camel.iter().any(|w| {
+                let w = w.strip_suffix('s').unwrap_or(w);
+                matches!(w, "key" | "pat" | "auth")
+            }) || ANYWHERE.iter().any(|w| part.contains(w))
+                || after_word(part, NOT_KEY).contains("key")
+                // `authorization` and `authentication` start like `author` but are credentials.
+                || ["authoriz", "authoris", "authent"]
+                    .iter()
+                    .any(|w| part.contains(w))
+                || after_word(part, NOT_AUTH).contains("auth")
+                || pat_word(part)
+        })
+}
+
+/// The lower-case words of a camelCase part: `githubPatHash` gives `github`, `pat`, `hash`. A
+/// part with no lower-to-upper change (`GITHUBPAT`, `pythonpath`) is one word.
+fn camel_words(part: &str) -> Vec<String> {
+    let mut words = vec![String::new()];
+    let mut prev_lower = false;
+    for c in part.chars() {
+        if c.is_uppercase() && prev_lower {
+            words.push(String::new());
+        }
+        prev_lower = c.is_lowercase() || c.is_ascii_digit();
+        words.last_mut().unwrap().extend(c.to_lowercase());
+    }
+    words
+}
+
+/// Whether a lower-case part has `pat` other than inside `path`, `patch`, `pattern`, `patient`,
+/// `patron`, `patio`, `patent`, `spatial`, `spatula` or `compat`.
+fn pat_word(part: &str) -> bool {
+    const NOT_AFTER: &[&str] = &["h", "ch", "tern", "ien", "ron", "io", "ent", "ial", "ula"];
+    part.match_indices("pat").any(|(i, _)| {
+        let after = &part[i + 3..];
+        !part[..i].ends_with("com") && !NOT_AFTER.iter().any(|w| after.starts_with(w))
+    })
 }
 
 fn unpinned(argv: &[String]) -> Option<String> {

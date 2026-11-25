@@ -9,6 +9,10 @@
   `$POSTGRES_PASSWORD`) is skipped.
 - Agent: an MCP config whose `npx` (or `pnpm dlx`) argument is empty or starts with a non-ASCII
   character no longer crashes the scan.
+- Agent: `agent.mcp-plaintext-secret` no longer takes an env key for a secret when its credential word is
+  only part of an ordinary word, so `PATH`, `PYTHONPATH`, `NODE_PATH`, `DISPATCH_MODE`, `AUTHOR`,
+  `MONKEY_PATCH` and `KEYCHAIN_PROFILE` are not reported. `GITHUB_PAT`, `githubPat`, `OPENAI_APIKEY`,
+  `daemonKey`, `patHash` and `clientSecret` still are.
 - Dependencies: `pubspec.lock` is read, so Dart and Flutter packages are checked against OSV.dev
   (`Pub` ecosystem). Packages from the `sdk` source, like `flutter`, are skipped.
 - Secrets: new rule `secret.gitlab-token` (critical) for GitLab personal access tokens (`glpat-` followed by 20 characters).

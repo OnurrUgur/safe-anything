@@ -20,6 +20,38 @@
     "tls": { "url": "https://mcp.acme-tools.io/mcp" },
     "empty": { "command": "npx", "args": [""] },
     "empty-dlx": { "command": "pnpm", "args": ["dlx", ""] },
-    "accent": { "command": "npx", "args": ["é@1.0.0"] }
+    "accent": { "command": "npx", "args": ["é@1.0.0"] },
+    "local-tool": {
+      "command": "/opt/tools/bin/local-mcp",
+      "env": {
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "PYTHONPATH": "/opt/tools/lib",
+        "NODE_PATH": "/opt/tools/node_modules",
+        "DISPATCH_MODE": "round-robin",
+        "AUTHOR": "Jane Example",
+        "MONKEY_PATCH": "enabled-always",
+        "KEYCHAIN_PROFILE": "default-profile",
+        "TURKEY_REGION": "europe-west-1",
+        "COMPAT_MODE": "legacy-v1-mode",
+        "PATTERN_FILE": "/opt/tools/patterns.txt"
+      }
+    },
+    "gh-pat": {
+      "command": "/opt/tools/bin/gh-mcp",
+      "env": {
+        "GITHUB_PAT": "EXAMPLE_NOT_A_REAL_PAT_VALUE",
+        "githubPat": "EXAMPLE_NOT_A_REAL_PAT_VALUE",
+        "OPENAI_APIKEY": "EXAMPLE_NOT_A_REAL_KEY_VALUE",
+        "clientSecret": "EXAMPLE_NOT_A_REAL_SECRET",
+        "BASIC_AUTH": "EXAMPLE_NOT_A_REAL_AUTH",
+        "API_KEY1": "EXAMPLE_NOT_A_REAL_KEY_VALUE",
+        "SSHKEY": "EXAMPLE_NOT_A_REAL_KEY_VALUE",
+        "GITHUB_OAUTH": "EXAMPLE_NOT_A_REAL_TOKEN",
+        "APIKEYVALUE": "EXAMPLE_NOT_A_REAL_KEY_VALUE",
+        "dbPassWord": "EXAMPLE_NOT_A_REAL_PASSWORD",
+        "daemonKey": "EXAMPLE_NOT_A_REAL_KEY_VALUE",
+        "GITHUBPATVALUE": "EXAMPLE_NOT_A_REAL_PAT_VALUE"
+      }
+    }
   }
 }

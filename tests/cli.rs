@@ -45,7 +45,16 @@ fn terminal_report_shows_file_line_rule_and_fix() {
     assert!(out.contains(".mcp.json:5"), "{out}");
     assert!(out.contains("agent.mcp-unpinned"), "{out}");
     assert!(out.contains("Pin an exact version"), "{out}");
-    assert!(out.contains("18 findings"), "{out}");
+    let expected = std::fs::read_to_string(Path::new(&fixture("agent")).join("EXPECTED"))
+        .unwrap()
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+        .count();
+    assert!(
+        out.lines()
+            .any(|l| l.starts_with(&format!("{expected} findings"))),
+        "{out}"
+    );
 }
 
 #[test]
