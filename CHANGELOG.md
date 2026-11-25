@@ -31,6 +31,8 @@
   local package) are no longer counted or looked up on PyPI.
 - Secrets: `secret.url-credentials` skips a connection string whose password is an angle-bracket placeholder
   such as `mongodb+srv://<username>:<password>@host/db`, the form MongoDB Atlas shows in its docs.
+- Secrets: `secret.private-key` also finds a key written with `\n` escapes inside a string, the way a Google
+  service-account JSON file stores it. The whole key body is masked in the output.
 - Dependencies: `pnpm-lock.yaml` is read again. A blank line ended the `packages:` section, and
   pnpm writes one right after it, so every pnpm project reported 0 packages checked.
 - Agent: new rule `agent.mcp-auto-approve` (high) for `"enableAllProjectMcpServers": true` in
