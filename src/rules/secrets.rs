@@ -1,4 +1,7 @@
 use std::path::Path;
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use super::{FileInfo, Meta, Rule, Text, finding};
 use crate::{Family, Finding, Severity};
@@ -82,6 +85,68 @@ const ENV_SECRET_LINE: &str = r#"(?m)^\s*(?:export\s+)?[A-Za-z0-9_]*(?i:secret|t
 
 const ENV_PLACEHOLDER: &str = r"^\s*(?:export\s+)?(?:NEXT_PUBLIC|VITE|REACT_APP|EXPO_PUBLIC|NUXT_PUBLIC|GATSBY|VUE_APP|PUBLIC)_|(?i)=\s*[\x22']?(?:\S*(?:your|example|change|replace|placeholder|dummy|xxxx|\.\.\.|<)|sk_test_|pk_test_|(?-i:[a-z]+[-_][a-z]+[-_][a-z]+))|=\s*[\x22']?\*+[\x22']?\s*$|=\s*[\x22']?\$";
 
+// A name with `aws` and `secret` in it, then `=` or `:` and a 40-character value. `aws` and
+// `secret` each start a word: at the start of the line, after a character that is not a letter
+// or digit (`_`, `-`, `.`, a quote), right after the other word (`awssecret`), or as a camelCase
+// word (`myAwsSecret`, `IAMAwsSecret`, `myAWSSecret`). So `flaws_secret` and `aws_unsecret` are
+// not read as one. Between the name and the value: a closing quote and `]`
+// (`environ["AWS_SECRET_ACCESS_KEY"] =`), a type (`: string =`, `: &str =`), and an opening
+// quote or backtick. The value itself, and what follows it, is checked by `plausible`.
+const AWS_SECRET_KEY: &str = concat!(
+    r#"(?m)(?:(?:(?:^|[^A-Za-z0-9\r\n])(?i:aws)|[a-z0-9]AWS|[A-Za-z0-9]Aws)"#,
+    r#"(?:(?i:secret)|[A-Za-z0-9_.\-]{0,64}(?:[_.\-](?i:secret)|[a-z0-9]SECRET|[A-Za-z0-9]Secret))"#,
+    r#"|(?:(?:^|[^A-Za-z0-9\r\n])(?i:secret)|[a-z0-9]SECRET|[A-Za-z0-9]Secret)"#,
+    r#"(?:(?i:aws)|[A-Za-z0-9_.\-]{0,64}(?:[_.\-](?i:aws)|[a-z0-9]AWS|[A-Za-z0-9]Aws)))"#,
+    r#"[A-Za-z0-9_.\-]{0,64}["']?\]?[ \t]{0,8}"#,
+    r#"(?::[ \t]{0,8}&?(?:'[A-Za-z_]{1,16}[ \t]{1,8})?[A-Za-z_][A-Za-z0-9_:<>]{0,64}[ \t]{0,8}=|:=|=>|[:=])"#,
+    r#"[ \t]{0,8}["'`]?([A-Za-z0-9/+]{40})"#,
+);
+
+/// Whether a matched value can be a secret for the rule. Only `secret.aws-secret-key` is checked:
+/// its value has no prefix, so placeholders and other 40-character strings have to be told apart
+/// by the value alone, and its pattern stops after the 40 characters, so `after` (the text that
+/// follows the match) must not go on with another base64 character.
+pub fn plausible(id: &str, value: Option<&str>, after: &str) -> bool {
+    id != "secret.aws-secret-key"
+        || (value.is_some_and(plausible_aws_secret)
+            && !after.starts_with(|c: char| c.is_ascii_alphanumeric() || "/+=".contains(c)))
+}
+
+/// Words that read as a name or a path: a first word in small letters, then words that start
+/// with a capital or after `/` or `+`, each with digits only at its end
+/// (`TestSecretKeyTestSecretKey1`, `myAwsSecretKey123`, `/Prod/East1/Payments/Keys`). In 40
+/// random base64 characters every capital would have to be followed by a small letter and every
+/// digit by a capital, `/`, `+` or the end, which practically never happens.
+static WORDS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^[/+]?[a-z]*[0-9]*(?:(?:[/+]?[A-Z]|[/+])[a-z]+[0-9]*)*[/+]?$").unwrap()
+});
+
+/// An AWS secret access key is 40 random base64 characters. So it has upper and lower case
+/// letters, about 30 different characters, no repeating chunk, no run of the alphabet, and it
+/// does not read as words or a path. That leaves out hex hashes, paths, `000...`, `xxx...`,
+/// `abcd...`, `TestSecretKey...` and the AWS docs key (`...EXAMPLEKEY`).
+fn plausible_aws_secret(value: &str) -> bool {
+    let v = value.as_bytes();
+    let distinct = v.iter().collect::<std::collections::HashSet<_>>().len();
+    // A chunk of up to 20 characters repeated over the value, give or take two characters.
+    let repeats = (1..=20.min(v.len() / 2)).any(|k| {
+        let same = (0..v.len() - k).filter(|&i| v[i] == v[i + k]).count();
+        same + k + 2 >= v.len()
+    });
+    let ascending = v
+        .windows(2)
+        .filter(|w| w[1] == w[0].wrapping_add(1))
+        .count();
+    v.iter().any(u8::is_ascii_uppercase)
+        && v.iter().any(u8::is_ascii_lowercase)
+        && !v.iter().all(u8::is_ascii_hexdigit)
+        && !value.to_ascii_lowercase().contains("example")
+        && distinct >= 12
+        && !repeats
+        && ascending < 10
+        && !WORDS.is_match(value)
+}
+
 const ROTATE: &str = "Revoke this credential at the provider, then load it from the environment or a secrets manager and keep it out of the repository.";
 
 macro_rules! secret {
@@ -106,6 +171,16 @@ pub static RULES: &[Rule] = &[
         r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b",
         "An AWS access key id is written in the file."
     ),
+    Rule {
+        id: "secret.aws-secret-key",
+        family: Family::Secret,
+        severity: Severity::Critical,
+        files: any_text,
+        pattern: AWS_SECRET_KEY,
+        unless: None,
+        message: "An AWS secret access key is written in the file.",
+        fix: ROTATE,
+    },
     secret!(
         "secret.github-token",
         Critical,
@@ -233,3 +308,50 @@ pub static RULES: &[Rule] = &[
         fix: "Drop the public prefix and use the value only in server code (an API route or server action); the browser should call your server instead.",
     },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::plausible_aws_secret;
+
+    #[test]
+    fn aws_secret_value_check() {
+        // Built from parts, like the fixtures, so the source holds no key-shaped literal.
+        let random = ["Q7mZ2xK9pL4vR8tN3wB6", "yH1cF5jD0s/QmZxK+a3f"].concat();
+        assert!(plausible_aws_secret(&random));
+        let docs_key = ["wJalrXUtnFEMI/K7MDENG/bPxRfiCY", "EXAMPLEKEY"].concat();
+        let chunk = "Q7mZ2xK9pL4vR8tN".repeat(3)[..40].to_string();
+        let lower = "q7mz2xk9pl4vr8tn3wb6yh1cf5jd0sg".repeat(2)[..40].to_string();
+        let upper = lower.to_ascii_uppercase();
+        // Each shape is turned down by one check only.
+        let rejected = [
+            ("no capital", lower),
+            ("no small letter", upper),
+            (
+                "all hex",
+                ["Da39A3eE5e6b4B0d", "3255bFeF95601890", "aFd80709"].concat(),
+            ),
+            ("example", docs_key),
+            (
+                "few distinct characters",
+                ["9ZpBQm7m9aQ7xQmp", "pmxm7pQamxBBaQaa", "pQxQ7ZKp"].concat(),
+            ),
+            ("a repeated chunk", chunk),
+            (
+                "a run of the alphabet",
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN".to_string(),
+            ),
+            (
+                "a path",
+                "/Prod/East1/Payments/Stripe/Billing/Keys".to_string(),
+            ),
+            (
+                "words",
+                "AwsSecretAccessKeyParameterNameForProd12".to_string(),
+            ),
+        ];
+        for (shape, value) in rejected {
+            assert_eq!(value.len(), 40, "{shape}");
+            assert!(!plausible_aws_secret(&value), "{shape}: {value}");
+        }
+    }
+}

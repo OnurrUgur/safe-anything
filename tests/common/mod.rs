@@ -13,6 +13,15 @@ const HEX: &str = "a3f91c07d5e284b6";
 pub fn fake(name: &str) -> String {
     match name {
         "aws" => ["AK", "IA", &body(16, UPPER)].concat(),
+        "aws-secret" => [
+            &body(18, MIXED),
+            "/",
+            &body(10, LETTERS),
+            "+",
+            &body(10, HEX),
+        ]
+        .concat(),
+        "aws-secret-example" => [&body(30, MIXED), "EXAMPLE", "KEY"].concat(),
         "github" => ["gh", "p_", &body(36, MIXED)].concat(),
         "gitlab" => ["gl", "pat-", &body(20, MIXED)].concat(),
         "github-pat" => ["github", "_pat_", &body(82, MIXED)].concat(),

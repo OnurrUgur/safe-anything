@@ -24,3 +24,17 @@ telegram = "{{fake:telegram}}"
 clock = "12:30:45"
 upstream = "localhost:8080"
 telegram_hyphen = "{{fake:telegram-hyphen}}"
+aws_secret_access_key = "{{fake:aws-secret}}"
+aws_secret_access_key = os.environ["AWS_SECRET_ACCESS_KEY"]
+checksum = "{{fake:aws-secret}}"
+aws_secret_access_key = "{{fake:aws-secret-example}}"
+aws = {"endpoint": "https://api.example.com", "awsSecretAccessKey": "{{fake:aws-secret}}"}
+aws_secret_access_key = "{{fake:aws-secret}}" # example prod key
+flaws_secret = "{{fake:aws-secret}}"
+FLAWS_SECRET_SHA = "{{fake:aws-secret}}"
+aws_secret_path = "/prod/east1/payments/stripe/billing/keys"
+aws_secret_access_key = "0000000000000000000000000000000000000000"
+aws_secret_access_key = "TestSecretKeyTestSecretKeyTestSecretKey1"
+aws_secret_path = "/Prod/East1/Payments/Stripe/Billing/Keys"
+aws_secret_a=0000000000000000000000000000000000000000,aws_secret_key={{fake:aws-secret}}
+aws_secret_access_key = "{{fake:aws-secret}}A"

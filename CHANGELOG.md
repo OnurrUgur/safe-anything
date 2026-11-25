@@ -26,6 +26,9 @@
 - Secrets: new rule `secret.npm-token` (critical) for npm access tokens (`npm_` followed by 36 letters or digits).
 - Secrets: new rule `secret.mailgun-key` (critical) for Mailgun private API keys (`key-` followed by 32 lowercase hex characters).
 - Secrets: new rule `secret.telegram-bot-token` (high) for Telegram bot tokens (8 to 10 digits, a colon, then 35 letters, digits, `_` or `-`).
+- Secrets: new rule `secret.aws-secret-key` (critical) for AWS secret access keys: a 40-character value assigned to a name with `aws` and `secret` in it
+  (`aws_secret_access_key = ...`, `AWS_SECRET_ACCESS_KEY=...`, `"awsSecretAccessKey": "..."`). Values that can't be a random key are
+  skipped: the AWS docs example key, hashes, paths, words like `TestSecretKey...`, `000...` and other repeats.
 - Code: new rule `code.open-redirect` (medium) for redirects built straight from request input (`res.redirect(req.query.next)`, `redirect(request.args.get("next"))`); a redirect to a fixed path stays unflagged.
 - Dependencies: `uv.lock` entries whose `source` is `editable`, `virtual` or `path` (the project itself or a
   local package) are no longer counted or looked up on PyPI.

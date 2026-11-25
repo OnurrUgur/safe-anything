@@ -213,6 +213,9 @@ pub fn check(file: &FileInfo, src: &str, include_tests: bool) -> Vec<Finding> {
             {
                 continue;
             }
+            if !secrets::plausible(c.rule.id, secret, &src[m.end()..]) {
+                continue;
+            }
             if seen.insert((c.rule.id.to_string(), line)) {
                 out.push(finding(
                     file,
