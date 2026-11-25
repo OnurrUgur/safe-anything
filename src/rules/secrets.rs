@@ -173,6 +173,12 @@ pub static RULES: &[Rule] = &[
         "A Telegram bot token is written in the file."
     ),
     secret!(
+        "secret.digitalocean-token",
+        Critical,
+        r"\bdo[opr]_v1_[a-f0-9]{64}\b",
+        "A DigitalOcean token is written in the file."
+    ),
+    secret!(
         "secret.private-key",
         Critical,
         r"-----BEGIN (?:(?:RSA|EC|DSA|OPENSSH|PGP|ENCRYPTED) )?PRIVATE KEY(?: BLOCK)?-----\r?\n([A-Za-z0-9+/=]{20,})",
