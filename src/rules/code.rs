@@ -243,6 +243,21 @@ pub static RULES: &[Rule] = &[
     rule!(
         "code.sql-injection",
         High,
+        go,
+        concat!(
+            r#"\.(?:Query|QueryRow|Exec)(?:\(|Context\(\s*[\w.]+(?:\(\))?\s*,)\s*(?:"\s*"#,
+            kw!(),
+            r#"[^"]*"|`\s*"#,
+            kw!(),
+            r#"[^`]*`)\s*\+\s*[A-Za-z_]"#
+        ),
+        None,
+        SQLI_MSG,
+        SQLI_FIX
+    ),
+    rule!(
+        "code.sql-injection",
+        High,
         jvm,
         concat!(r#""\s*"#, kw!(), r#"[^"]*"\s*\+\s*[A-Za-z_]"#),
         None,
