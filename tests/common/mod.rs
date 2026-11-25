@@ -26,6 +26,7 @@ pub fn fake(name: &str) -> String {
         .concat(),
         "stripe-live" => ["sk", "_live_", &body(24, MIXED)].concat(),
         "npm" => ["np", "m_", &body(36, MIXED)].concat(),
+        "pypi-token" => ["py", "pi-", "AgEIcHlw", "aS5vcmc", &body(70, MIXED)].concat(),
         "huggingface-token" => ["h", "f_", &body(34, LETTERS)].concat(),
         "stripe-test" => ["sk", "_test_", &body(24, MIXED)].concat(),
         "anthropic" => ["sk-", "ant-api03-", &body(40, MIXED)].concat(),
