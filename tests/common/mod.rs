@@ -34,6 +34,7 @@ pub fn fake(name: &str) -> String {
         "mailgun" => ["ke", "y-", &body(32, HEX)].concat(),
         "telegram" => ["1234", "567890", ":", &body(35, MIXED)].concat(),
         "telegram-hyphen" => ["1234", "567890", ":", &body(34, MIXED), "-"].concat(),
+        "twilio" => ["S", "K", &body(32, HEX)].concat(),
         "password" => ["hunter2", "hunter2"].concat(),
         "db-password" => ["S3cret", "Passw0rd"].concat(),
         "base64-padded" => [&body(30, MIXED), "=="].concat(),

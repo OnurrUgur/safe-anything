@@ -173,6 +173,12 @@ pub static RULES: &[Rule] = &[
         "A Telegram bot token is written in the file."
     ),
     secret!(
+        "secret.twilio-api-key",
+        Critical,
+        r"\bSK[0-9a-f]{32}\b",
+        "A Twilio API key is written in the file."
+    ),
+    secret!(
         "secret.private-key",
         Critical,
         r"-----BEGIN (?:(?:RSA|EC|DSA|OPENSSH|PGP|ENCRYPTED) )?PRIVATE KEY(?: BLOCK)?-----\r?\n([A-Za-z0-9+/=]{20,})",
