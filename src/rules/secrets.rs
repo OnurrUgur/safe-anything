@@ -175,7 +175,10 @@ pub static RULES: &[Rule] = &[
     secret!(
         "secret.private-key",
         Critical,
-        r"-----BEGIN (?:(?:RSA|EC|DSA|OPENSSH|PGP|ENCRYPTED) )?PRIVATE KEY(?: BLOCK)?-----\r?\n([A-Za-z0-9+/=]{20,})",
+        // A PEM file has real line breaks. A JSON string (a Google
+        // service-account key) has `\n` escapes instead; there the whole body
+        // is on the line, so all of it is captured for redaction.
+        r"-----BEGIN (?:(?:RSA|EC|DSA|OPENSSH|PGP|ENCRYPTED) )?PRIVATE KEY(?: BLOCK)?-----(?:\r?\n([A-Za-z0-9+/=]{20,})|\\n([A-Za-z0-9+/=]{20,}(?:\\n[A-Za-z0-9+/=]+)*))",
         "A private key is stored in the repository."
     ),
     Rule {
