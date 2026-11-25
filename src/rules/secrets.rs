@@ -124,6 +124,16 @@ pub static RULES: &[Rule] = &[
         r"\bxox[baprs]-[A-Za-z0-9-]{10,}",
         "A Slack token is written in the file."
     ),
+    Rule {
+        id: "secret.slack-webhook",
+        family: Family::Secret,
+        severity: Severity::High,
+        files: any_text,
+        pattern: r"\bhooks\.slack\.com/services/(T[A-Z0-9]{8,}/B[A-Z0-9]{8,}/[A-Za-z0-9]{24})\b",
+        unless: Some(r"hooks\.slack\.com/services/[A-Za-z0-9/]*?(?:0{8}|(?i:x{8}))"),
+        message: "A Slack incoming webhook URL is written in the file.",
+        fix: ROTATE,
+    },
     secret!(
         "secret.stripe-live-key",
         Critical,

@@ -24,6 +24,17 @@ pub fn fake(name: &str) -> String {
             &body(24, MIXED),
         ]
         .concat(),
+        "slack-webhook" => [
+            "https://hooks.",
+            "slack.com/services/",
+            "T0",
+            &body(9, UPPER),
+            "/B0",
+            &body(9, UPPER),
+            "/",
+            &body(24, MIXED),
+        ]
+        .concat(),
         "stripe-live" => ["sk", "_live_", &body(24, MIXED)].concat(),
         "npm" => ["np", "m_", &body(36, MIXED)].concat(),
         "huggingface-token" => ["h", "f_", &body(34, LETTERS)].concat(),
