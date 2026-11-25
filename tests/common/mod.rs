@@ -25,6 +25,7 @@ pub fn fake(name: &str) -> String {
         ]
         .concat(),
         "stripe-live" => ["sk", "_live_", &body(24, MIXED)].concat(),
+        "shopify-token" => ["sh", "pat_", &body(32, HEX)].concat(),
         "npm" => ["np", "m_", &body(36, MIXED)].concat(),
         "huggingface-token" => ["h", "f_", &body(34, LETTERS)].concat(),
         "stripe-test" => ["sk", "_test_", &body(24, MIXED)].concat(),

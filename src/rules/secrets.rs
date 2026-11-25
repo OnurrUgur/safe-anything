@@ -131,6 +131,12 @@ pub static RULES: &[Rule] = &[
         "A live Stripe secret key is written in the file."
     ),
     secret!(
+        "secret.shopify-token",
+        Critical,
+        r"\bshp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}\b",
+        "A Shopify access token is written in the file."
+    ),
+    secret!(
         "secret.npm-token",
         Critical,
         r"\bnpm_[A-Za-z0-9]{36}\b",
