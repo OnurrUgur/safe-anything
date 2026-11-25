@@ -85,7 +85,7 @@ Every rule safe-anything checks, generated from `safe-anything --list-rules --js
 | [`mobile.ios-ats-disabled`](https://mas.owasp.org/MASVS/08-MASVS-NETWORK/) | high | [CWE-319](https://cwe.mitre.org/data/definitions/319.html) | MASVS-NETWORK | App Transport Security is off, so the app may load anything over plain HTTP. |
 | [`mobile.insecure-storage`](https://mas.owasp.org/MASVS/05-MASVS-STORAGE/) | medium | [CWE-922](https://cwe.mitre.org/data/definitions/922.html) | MASVS-STORAGE | A token or password is saved in plain storage that other code, backups or XSS can read. |
 
-## Config (15)
+## Config (16)
 
 | Rule | Severity | CWE | OWASP | What it means |
 | --- | --- | --- | --- | --- |
@@ -102,6 +102,7 @@ Every rule safe-anything checks, generated from `safe-anything --list-rules --js
 | [`config.k8s-host-access`](https://cheatsheetseries.owasp.org/cheatsheets/Kubernetes_Security_Cheat_Sheet.html) | high | [CWE-250](https://cwe.mitre.org/data/definitions/250.html) | A05:2021 Security Misconfiguration | The pod shares the host's network, process or IPC namespace. |
 | [`config.tf-open-ingress`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) | medium | [CWE-284](https://cwe.mitre.org/data/definitions/284.html) | A01:2021 Broken Access Control | A network rule is open to the whole internet. |
 | [`config.tf-public-bucket`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) | high | [CWE-284](https://cwe.mitre.org/data/definitions/284.html) | A01:2021 Broken Access Control | A storage bucket is public. |
+| [`config.tf-public-access-block`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) | medium | [CWE-284](https://cwe.mitre.org/data/definitions/284.html) | A01:2021 Broken Access Control | An S3 public access block is turned off, so a bucket policy can make the bucket (or every bucket in the account) public. |
 | [`config.nginx-autoindex`](https://cheatsheetseries.owasp.org/cheatsheets/Attack_Surface_Analysis_Cheat_Sheet.html) | low | [CWE-548](https://cwe.mitre.org/data/definitions/548.html) | A05:2021 Security Misconfiguration | Directory listing is on, so every file in the folder can be browsed. |
 | [`config.weak-tls-version`](https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html) | medium | [CWE-326](https://cwe.mitre.org/data/definitions/326.html) | A02:2021 Cryptographic Failures | Old TLS or SSL versions are enabled; they have known attacks. |
 

@@ -12,6 +12,9 @@ Dockerfile:8 config.docker-root-user
 docker-compose.yml:3 config.privileged-container
 infra/main.tf:3 config.tf-open-ingress
 infra/main.tf:6 config.tf-public-bucket
+infra/main.tf:11 config.tf-public-access-block
+infra/main.tf:13 config.tf-public-access-block
+infra/main.tf:17 config.tf-public-access-block
 k8s/deploy.yaml:2 config.k8s-host-access
 k8s/deploy.yaml:5 config.privileged-container
 k8s/deploy.yaml:6 config.privileged-container
