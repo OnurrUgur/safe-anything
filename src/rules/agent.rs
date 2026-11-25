@@ -115,28 +115,41 @@ pub static RULES: &[Rule] = &[
     ),
 ];
 
-pub static STRUCTURED: &[(&str, Severity, &str)] = &[
+/// Rules found by reading the config's structure. A finding writes its own message (and, for a
+/// secret in `headers`, its own fix); these are the general texts for `--list-rules` and the
+/// SARIF rule help.
+pub static STRUCTURED: &[(&str, Severity, &str, &str)] = &[
     (
         "agent.unrestricted-shell",
         Severity::High,
         "Every shell command is pre-approved, so the agent can run anything without asking.",
+        SHELL_FIX,
     ),
     (
         "agent.mcp-unpinned",
         Severity::Medium,
         "An MCP server is started from a package or image with no pinned version.",
+        UNPINNED_FIX,
     ),
     (
         "agent.mcp-plaintext-secret",
         Severity::High,
         "An MCP server's token or key is written in plain text in the config.",
+        PLAINTEXT_FIX,
     ),
     (
         "agent.mcp-insecure-url",
         Severity::High,
         "A remote MCP server is reached over plain HTTP.",
+        INSECURE_URL_FIX,
     ),
 ];
+
+const SHELL_FIX: &str = "Allow specific commands, for example \"Bash(npm test:*)\".";
+const UNPINNED_FIX: &str =
+    "Pin an exact version (pkg@1.2.3, pkg==1.2.3, or an image digest) and update on purpose.";
+const PLAINTEXT_FIX: &str = "Reference an environment variable (\"${VAR}\") and keep the value out of files that get shared or committed.";
+const INSECURE_URL_FIX: &str = "Use https:// for every MCP server that is not on this machine.";
 
 pub fn structured(file: &FileInfo, text: &Text) -> Vec<Finding> {
     if !is_mcp_config(file) {
@@ -200,7 +213,7 @@ fn check_claude_permissions(file: &FileInfo, text: &Text, json: &Value, out: &mu
                     family: Family::Agent,
                     severity: Severity::High,
                     message: "Every shell command is pre-approved, so the agent can run anything without asking.",
-                    fix: "Allow specific commands, for example \"Bash(npm test:*)\".",
+                    fix: SHELL_FIX,
                     secret: None,
                 },
             ));
@@ -249,7 +262,7 @@ fn check_server(
                 family: Family::Agent,
                 severity: Severity::Medium,
                 message: &format!("The MCP server runs `{spec}` without a pinned version, so every start installs whatever was published last."),
-                fix: "Pin an exact version (pkg@1.2.3, pkg==1.2.3, or an image digest) and update on purpose.",
+                fix: UNPINNED_FIX,
                 secret: None,
             },
         ));
@@ -290,7 +303,7 @@ fn check_server(
                 } else {
                     (
                         format!("The MCP server's {k} is written in plain text in the config."),
-                        "Reference an environment variable (\"${VAR}\") and keep the value out of files that get shared or committed.",
+                        PLAINTEXT_FIX,
                     )
                 };
                 out.push(finding(
@@ -327,7 +340,7 @@ fn check_server(
                 family: Family::Agent,
                 severity: Severity::High,
                 message: "A remote MCP server is reached over plain HTTP, so its tools and your data can be read or changed on the way.",
-                fix: "Use https:// for every MCP server that is not on this machine.",
+                fix: INSECURE_URL_FIX,
                 secret: None,
             },
         ));

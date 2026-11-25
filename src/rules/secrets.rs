@@ -5,10 +5,11 @@ use crate::{Family, Finding, Severity};
 
 pub const NAME_ONLY: &[&str] = &["secret.public-env-secret"];
 
-pub const ENV_NOT_IGNORED: (&str, Severity, &str) = (
+pub const ENV_NOT_IGNORED: (&str, Severity, &str, &str) = (
     "secret.env-not-ignored",
     Severity::Medium,
     "The project has env files but .gitignore does not exclude .env, so real secrets are one git add away from the repository.",
+    "Add .env and .env.* to .gitignore, with !.env.example so the example file stays tracked.",
 );
 
 pub fn is_env(name: &str) -> bool {
@@ -44,7 +45,7 @@ pub fn env_not_ignored(root: &Path, env_files: &[String]) -> Option<Finding> {
     // copy the secret value into a diagnostic snippet.
     let empty = Text::new("");
     let finding_text = if has_gitignore { &text } else { &empty };
-    let (id, severity, message) = ENV_NOT_IGNORED;
+    let (id, severity, message, fix) = ENV_NOT_IGNORED;
     Some(finding(
         &FileInfo::new(&file),
         finding_text,
@@ -54,7 +55,7 @@ pub fn env_not_ignored(root: &Path, env_files: &[String]) -> Option<Finding> {
             family: Family::Secret,
             severity,
             message,
-            fix: "Add .env and .env.* to .gitignore, with !.env.example so the example file stays tracked.",
+            fix,
             secret: None,
         },
     ))
