@@ -8,6 +8,9 @@
   `user:${PASSWORD}` are skipped, `admin:<password>@${DB_HOST}` and `${TOKEN:-sk_live_...}` are
   reported.
 - Agent: `agent.unrestricted-shell` now reads `permissions.allow` in `.claude/settings*.json` instead of matching `"Bash"` anywhere in the file, so entries in `deny`, `ask`, or hook matchers are no longer flagged.
+- Agent: more agent files are read: `.clinerules` (a file or a folder), `.windsurf/rules/`, `.github/instructions/*.instructions.md`,
+  `.github/prompts/*.prompt.md`, `.roo/rules/` and `.kiro/steering/` for instructions, and Windsurf's `mcp_config.json`,
+  `cline_mcp_settings.json`, and Zed's `.zed/settings.json` and `.config/zed/settings.json` (`context_servers`) for MCP servers.
 - Secrets: `secret.env-not-ignored` is reported at the `.env` file when the project has no `.gitignore`
   at all. Example files like `.env.example` alone no longer trigger it.
 - Secrets: `secret.env-file` and `secret.env-example-value` now catch base64 values ending in `=` padding and

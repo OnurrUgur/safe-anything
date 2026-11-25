@@ -11,9 +11,22 @@ pub fn is_mcp_config(f: &FileInfo) -> bool {
         || f.name == "claude_desktop_config.json"
         || f.name == "opencode.json"
         || f.name == "opencode.jsonc"
+        // Windsurf and Cline.
+        || f.name == "mcp_config.json"
+        || f.name == "cline_mcp_settings.json"
         || (f.name.starts_with("settings")
             && f.ext == "json"
             && (f.under(".gemini/") || f.under(".claude/")))
+        // Zed: `.zed/settings.json` in a project, `.config/zed/settings.json` in a home folder.
+        || ends_with_path(f, ".zed/settings.json")
+        || ends_with_path(f, ".config/zed/settings.json")
+}
+
+/// Whether the file is `tail` itself or `tail` inside some folder, matched by whole folder names.
+fn ends_with_path(f: &FileInfo, tail: &str) -> bool {
+    f.rel
+        .strip_suffix(tail)
+        .is_some_and(|head| head.is_empty() || head.ends_with('/'))
 }
 
 fn claude_settings(f: &FileInfo) -> bool {
@@ -39,6 +52,14 @@ pub fn is_agent_file(f: &FileInfo) -> bool {
         || f.under(".claude/hooks/")
         || f.under(".cursor/rules/")
         || f.under(".gemini/commands/")
+        // Cline reads `.clinerules` as one file or as a folder of rule files.
+        || f.name == ".clinerules"
+        || f.under(".clinerules/")
+        || f.under(".windsurf/rules/")
+        || (f.under(".github/instructions/") && f.name.ends_with(".instructions.md"))
+        || (f.under(".github/prompts/") && f.name.ends_with(".prompt.md"))
+        || f.under(".roo/rules/")
+        || f.under(".kiro/steering/")
 }
 
 macro_rules! rule {
