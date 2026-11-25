@@ -8,8 +8,13 @@
   `user:${PASSWORD}` are skipped, `admin:<password>@${DB_HOST}` and `${TOKEN:-sk_live_...}` are
   reported.
 - Agent: `agent.unrestricted-shell` now reads `permissions.allow` in `.claude/settings*.json` instead of matching `"Bash"` anywhere in the file, so entries in `deny`, `ask`, or hook matchers are no longer flagged.
+- Agent: `agent.mcp-unpinned` skips the value of flags like `--python` (`uvx`, `pipx run`) and `--user`
+  or `--platform` (`docker run`, `podman run`), so `uvx --python 3.12 pkg==1.0` no longer reports `3.12`
+  and `docker run -u 1000:1000 acme/mcp` reports `acme/mcp`. An empty `docker run` argument is skipped.
 - Secrets: `secret.env-not-ignored` is reported at the `.env` file when the project has no `.gitignore`
   at all. Example files like `.env.example` alone no longer trigger it.
+- Secrets: `secret.env-not-ignored` reads `.gitignore` the way git does, so only a line that really ignores
+  `.env` counts. `.envrc`, `.env.local`, `.env/`, `# .env` or a later `!.env` no longer hide it.
 - Secrets: `secret.env-file` and `secret.env-example-value` now catch base64 values ending in `=` padding and
   passwords with `!@#$%^&*`. A value that is only `*` characters or starts with `$` (a reference like
   `$POSTGRES_PASSWORD`) is skipped.
@@ -19,6 +24,7 @@
   only part of an ordinary word, so `PATH`, `PYTHONPATH`, `NODE_PATH`, `DISPATCH_MODE`, `AUTHOR`,
   `MONKEY_PATCH` and `KEYCHAIN_PROFILE` are not reported. `GITHUB_PAT`, `githubPat`, `OPENAI_APIKEY`,
   `daemonKey`, `patHash` and `clientSecret` still are.
+- Agent: `agent.mcp-insecure-url` now reads a bracketed IPv6 host up to its closing `]` (only `[::1]` counts as local) and matches `http://` without regard to case.
 - Dependencies: `pubspec.lock` is read, so Dart and Flutter packages are checked against OSV.dev
   (`Pub` ecosystem). Packages from the `sdk` source, like `flutter`, are skipped.
 - Secrets: new rule `secret.gitlab-token` (critical) for GitLab personal access tokens (`glpat-` followed by 20 characters).
@@ -26,18 +32,46 @@
 - Secrets: new rule `secret.npm-token` (critical) for npm access tokens (`npm_` followed by 36 letters or digits).
 - Secrets: new rule `secret.mailgun-key` (critical) for Mailgun private API keys (`key-` followed by 32 lowercase hex characters).
 - Secrets: new rule `secret.telegram-bot-token` (high) for Telegram bot tokens (8 to 10 digits, a colon, then 35 letters, digits, `_` or `-`).
+- Secrets: new rule `secret.twilio-api-key` (critical) for Twilio API keys (`SK` followed by 32 lowercase hex characters).
+- Secrets: new rule `secret.digitalocean-token` (critical) for DigitalOcean tokens (`dop_v1_`, `doo_v1_` or `dor_v1_` followed by 64 lowercase hex characters).
+- Secrets: new rule `secret.shopify-token` (critical) for Shopify access tokens (`shpat_`, `shpca_`, `shppa_` or `shpss_` followed by 32 hex characters).
+- Secrets: new rule `secret.pypi-token` (critical) for PyPI upload tokens (`pypi-AgEIcHlwaS5vcmc` followed by 50 or more characters).
+- Secrets: new rule `secret.sendgrid-key` (critical) for SendGrid API keys (`SG.`, 22 characters, a dot, then 43 characters).
+- Secrets: new rule `secret.discord-webhook` (high) for Discord webhook URLs (`discord.com/api/webhooks/` or `discordapp.com/api/webhooks/`, a 17 to 20 digit id, then a token of 60 or more characters).
+- Secrets: new rule `secret.slack-webhook` (high) for Slack incoming webhook URLs (`hooks.slack.com/services/T…/B…/` and a 24-character token). The docs placeholder with `T00000000` or `XXXXXXXX` is skipped.
+- Config: new rule `config.tf-public-access-block` (medium) for `block_public_policy = false` or
+  `restrict_public_buckets = false` in an `aws_s3_bucket_public_access_block` or `aws_s3_account_public_access_block`.
+- Secrets: new rule `secret.groq-key` (critical) for Groq API keys (`gsk_` followed by 52 letters or digits).
 - Code: new rule `code.open-redirect` (medium) for redirects built straight from request input (`res.redirect(req.query.next)`, `redirect(request.args.get("next"))`); a redirect to a fixed path stays unflagged.
 - Config: new rules `config.tf-public-database` (high) for `publicly_accessible = true` and `config.tf-unencrypted-storage` (medium)
   for `storage_encrypted = false` in Terraform files. `publicly_accessible = false`, `storage_encrypted = true` and commented-out lines stay unflagged.
+- Config: `config.remote-script` also checks GitHub Actions workflows, so a `run:` step (or a line in a
+  `run: |` block) that pipes `curl` or `wget` into a shell is reported. `curl -o file URL`, a step `name:` and a
+  commented-out line are not.
+- Code: `code.sql-injection` also catches Go queries built by concatenation in `db.Query`, `db.QueryRow`, `db.Exec`
+  and their `Context` variants (`db.Query("SELECT * FROM t WHERE id=" + id)`). A query with a placeholder stays unflagged.
+- Code: `code.ssrf` also covers Go (`http.Get`, `http.Head`, `http.Post` with `r.FormValue(...)` or `r.URL.Query().Get(...)`)
+  and PHP (`file_get_contents`, `curl_init`, `fopen` with `$_GET`, `$_POST` or `$_REQUEST`). A fixed URL stays unflagged.
+- Code: `code.open-redirect` now also matches a status code first, so `res.redirect(301, req.query.next)` is reported; a redirect to a fixed path stays unflagged.
 - Dependencies: `uv.lock` entries whose `source` is `editable`, `virtual` or `path` (the project itself or a
   local package) are no longer counted or looked up on PyPI.
+- Dependencies: `Gemfile.lock` gems from `GIT` and `PATH` sections (a git repository or a local folder) are
+  no longer counted or looked up on RubyGems. Only gems in `GEM` sections are.
 - Secrets: `secret.url-credentials` skips a connection string whose password is an angle-bracket placeholder
   such as `mongodb+srv://<username>:<password>@host/db`, the form MongoDB Atlas shows in its docs.
+- Secrets: `secret.private-key` also finds a key written with `\n` escapes inside a string, the way a Google
+  service-account JSON file stores it. The whole key body is masked in the output.
 - Dependencies: `pnpm-lock.yaml` is read again. A blank line ended the `packages:` section, and
   pnpm writes one right after it, so every pnpm project reported 0 packages checked.
 - Agent: new rule `agent.mcp-auto-approve` (high) for `"enableAllProjectMcpServers": true` in
   `.claude/settings*.json`, which starts every MCP server in the project's `.mcp.json` without asking about
   each one.
+- CLI: `--sarif` writes paths from the working directory, not from the scanned folder, so
+  `safe-anything app --sarif` (or the action's `path: app`) gives `app/src/x.js` and code scanning finds
+  the file. The terminal and `--json` reports keep paths relative to the scanned folder.
+- CLI: SARIF rules have a `fullDescription` and a `help` text (the fix, the CWE and OWASP category, and the
+  link), so a GitHub code scanning alert shows the fix in its side panel. `--list-rules --json` and the MCP
+  `list_rules` tool include each rule's `fix`.
 
 ## 1.0.2 (2026-11-23)
 
