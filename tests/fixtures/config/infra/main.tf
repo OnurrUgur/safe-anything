@@ -5,3 +5,12 @@ resource "aws_security_group_rule" "ssh" {
 resource "aws_s3_bucket_acl" "b" {
   acl = "public-read"
 }
+resource "aws_db_instance" "d" {
+  publicly_accessible = true
+  storage_encrypted   = false
+}
+resource "aws_db_instance" "private" {
+  publicly_accessible = false
+  storage_encrypted   = true # was = false
+  # publicly_accessible = true
+}

@@ -165,6 +165,24 @@ pub static RULES: &[Rule] = &[
         "Make it private and serve files through a CDN or signed URLs."
     ),
     rule!(
+        "config.tf-public-database",
+        High,
+        terraform,
+        r#"(?m)^[ \t]*publicly_accessible[ \t]*=[ \t]*(?:true|"true")[ \t]*(?:\r?$|#|//|/\*)"#,
+        None,
+        "A database gets a public IP address, so only its security group stands between it and the internet.",
+        "Set publicly_accessible = false and reach the database from inside its network, through a bastion host or a VPN."
+    ),
+    rule!(
+        "config.tf-unencrypted-storage",
+        Medium,
+        terraform,
+        r#"(?m)^[ \t]*storage_encrypted[ \t]*=[ \t]*(?:false|"false")[ \t]*(?:\r?$|#|//|/\*)"#,
+        None,
+        "A database's storage is not encrypted at rest, so its snapshots and backups are not encrypted either.",
+        "Set storage_encrypted = true, with a kms_key_id if you manage your own keys."
+    ),
+    rule!(
         "config.nginx-autoindex",
         Low,
         server_conf,

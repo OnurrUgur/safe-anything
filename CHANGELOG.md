@@ -27,6 +27,8 @@
 - Secrets: new rule `secret.mailgun-key` (critical) for Mailgun private API keys (`key-` followed by 32 lowercase hex characters).
 - Secrets: new rule `secret.telegram-bot-token` (high) for Telegram bot tokens (8 to 10 digits, a colon, then 35 letters, digits, `_` or `-`).
 - Code: new rule `code.open-redirect` (medium) for redirects built straight from request input (`res.redirect(req.query.next)`, `redirect(request.args.get("next"))`); a redirect to a fixed path stays unflagged.
+- Config: new rules `config.tf-public-database` (high) for `publicly_accessible = true` and `config.tf-unencrypted-storage` (medium)
+  for `storage_encrypted = false` in Terraform files. `publicly_accessible = false`, `storage_encrypted = true` and commented-out lines stay unflagged.
 - Dependencies: `uv.lock` entries whose `source` is `editable`, `virtual` or `path` (the project itself or a
   local package) are no longer counted or looked up on PyPI.
 - Secrets: `secret.url-credentials` skips a connection string whose password is an angle-bracket placeholder
