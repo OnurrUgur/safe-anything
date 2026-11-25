@@ -8,6 +8,9 @@
   `user:${PASSWORD}` are skipped, `admin:<password>@${DB_HOST}` and `${TOKEN:-sk_live_...}` are
   reported.
 - Agent: `agent.unrestricted-shell` now reads `permissions.allow` in `.claude/settings*.json` instead of matching `"Bash"` anywhere in the file, so entries in `deny`, `ask`, or hook matchers are no longer flagged.
+- Agent: `agent.mcp-unpinned` skips the value of flags like `--python` (`uvx`, `pipx run`) and `--user`
+  or `--platform` (`docker run`, `podman run`), so `uvx --python 3.12 pkg==1.0` no longer reports `3.12`
+  and `docker run -u 1000:1000 acme/mcp` reports `acme/mcp`. An empty `docker run` argument is skipped.
 - Secrets: `secret.env-not-ignored` is reported at the `.env` file when the project has no `.gitignore`
   at all. Example files like `.env.example` alone no longer trigger it.
 - Secrets: `secret.env-file` and `secret.env-example-value` now catch base64 values ending in `=` padding and
