@@ -329,6 +329,24 @@ pub static RULES: &[Rule] = &[
         "Allow only known hosts, block private and link-local addresses, and never pass the raw URL through."
     ),
     rule!(
+        "code.ssrf",
+        High,
+        go,
+        r"\bhttp\.(?:Get|Head|Post)\(\s*(?:r|req)\.(?:FormValue\(|URL\.Query\(\)\.Get\()",
+        None,
+        "The server fetches a URL taken from the request, so users can reach internal services (SSRF).",
+        "Allow only known hosts, block private and link-local addresses, and never pass the raw URL through."
+    ),
+    rule!(
+        "code.ssrf",
+        High,
+        php,
+        r"\b(?:file_get_contents|curl_init|fopen)\s*\(\s*\$_(?:GET|POST|REQUEST)\b",
+        None,
+        "The server fetches a URL taken from the request, so users can reach internal services (SSRF).",
+        "Allow only known hosts, block private and link-local addresses, and never pass the raw URL through."
+    ),
+    rule!(
         "code.open-redirect",
         Medium,
         js,
