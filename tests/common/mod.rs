@@ -9,6 +9,8 @@ const MIXED: &str = "Q7mZ2xK9pL4vR8tN3wB6yH1cF5jD0sG";
 const UPPER: &str = "Q7MZ2XK9PL4VR8TN3WB6YH1CF5JD0SG";
 const LETTERS: &str = "QmZxKpLvRtNwByHcFjDsG";
 const HEX: &str = "a3f91c07d5e284b6";
+// Unlike the others, so a leak of this body is not mistaken for another token.
+const KEY_BODY: &str = "Zr8Wq2Xn5Mb7Vc4Lk1Jh6Gf9Dd3Ss0AaUe";
 
 pub fn fake(name: &str) -> String {
     match name {
@@ -24,14 +26,15 @@ pub fn fake(name: &str) -> String {
             &body(24, MIXED),
         ]
         .concat(),
-        "discord-webhook" => [
-            "https://disc",
-            "ord.com/api/webhooks/",
-            "1234567890",
-            "12345678/",
-            &body(34, MIXED),
-            "-",
-            &body(33, MIXED),
+        "slack-webhook" => [
+            "https://hooks.",
+            "slack.com/services/",
+            "T0",
+            &body(9, UPPER),
+            "/B0",
+            &body(9, UPPER),
+            "/",
+            &body(24, MIXED),
         ]
         .concat(),
         "stripe-live" => ["sk", "_live_", &body(24, MIXED)].concat(),
@@ -42,6 +45,7 @@ pub fn fake(name: &str) -> String {
         "openai" => ["sk-", "proj-", &body(48, MIXED)].concat(),
         "google" => ["AI", "za", &body(35, MIXED)].concat(),
         "mailgun" => ["ke", "y-", &body(32, HEX)].concat(),
+        "groq" => ["gs", "k_", &body(52, MIXED)].concat(),
         "telegram" => ["1234", "567890", ":", &body(35, MIXED)].concat(),
         "telegram-hyphen" => ["1234", "567890", ":", &body(34, MIXED), "-"].concat(),
         "password" => ["hunter2", "hunter2"].concat(),
@@ -62,6 +66,31 @@ pub fn fake(name: &str) -> String {
             "PRIVATE KEY-----\n",
             "MIIEowIBAAKCAQEA",
             &body(48, MIXED),
+        ]
+        .concat(),
+        // How a Google service-account JSON file stores a key: one JSON
+        // string, with `\n` escapes instead of line breaks.
+        "private-key-json" => [
+            "-----BEGIN ",
+            "PRIVATE KEY-----\\n",
+            "MIIEvQIBADANBgkq",
+            &body(48, KEY_BODY),
+            "\\n",
+            &body(64, KEY_BODY),
+            "\\n",
+            &body(40, KEY_BODY),
+            "=\\n-----END ",
+            "PRIVATE KEY-----\\n",
+        ]
+        .concat(),
+        "discord-webhook" => [
+            "https://disc",
+            "ord.com/api/webhooks/",
+            "1234567890",
+            "12345678/",
+            &body(34, MIXED),
+            "-",
+            &body(33, MIXED),
         ]
         .concat(),
         other => panic!("no fake value named {other}"),
